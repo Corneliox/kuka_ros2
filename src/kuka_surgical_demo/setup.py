@@ -49,6 +49,9 @@ setup(
             'voice_bridge_node = kuka_surgical_demo.voice_bridge:main',
             'bridge_node = kuka_surgical_demo.bridge_node:main',
             'palm_approach_node = kuka_surgical_demo.palm_approach_node:main',
+            'vision_node = kuka_surgical_demo.vision:main',
+            'hover_xy_node = kuka_surgical_demo.hover_xy_node:main',
+            'axis_node = kuka_surgical_demo.axis_sweep:main',
         ],
     },
 )

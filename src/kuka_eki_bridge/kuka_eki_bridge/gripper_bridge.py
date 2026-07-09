@@ -19,7 +19,7 @@ def build_gripper_packet(state: int) -> bytes:
         b'<Type>0</Type>'
         b'<Axis A1="0" A2="0" A3="0" A4="0" A5="0" A6="0"/>'
         b'<Cart X="0" Y="0" Z="0" A="0" B="0" C="0"/>'
-        b'<Velocity>0.1</Velocity>'
+        b'<Velocity>0.05</Velocity>'
         b'<Gripper>' + str(state).encode() + b'</Gripper>'
         b'</RobotCommand>'
     )
@@ -145,7 +145,7 @@ class MoveItEkiBridge(Node):
         self.get_logger().info(f"Sending: {target}")
 
         try:
-            self.motion_client.ptp(target, max_velocity_scaling=0.1)
+            self.motion_client.ptp(target, max_velocity_scaling=0.05)
             self.get_logger().info("Command sent.")
         except Exception as e:
             self.get_logger().error(f"Transmission failed: {e}")
