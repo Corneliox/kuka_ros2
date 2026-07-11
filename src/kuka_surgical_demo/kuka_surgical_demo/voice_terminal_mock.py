@@ -23,7 +23,7 @@ class VoiceTerminalMock(Node):
         self._pub = self.create_publisher(String, '/voice_command', 10)
         self.get_logger().info(
             'Voice terminal ready.\n'
-            'Commands: scalpel | forceps | retractor | quit')
+            'Commands: red | blue | yellow | quit')
 
     def loop(self):
         while rclpy.ok():

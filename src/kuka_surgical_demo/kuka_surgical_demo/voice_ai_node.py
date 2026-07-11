@@ -25,17 +25,17 @@ class VoiceAINode(Node):
         # as a match. Add more aliases here as you observe mis-hears
         # in the log (see "Heard so far" / "Final phrase detected").
         self.instrument_aliases = {
-            'forceps': {
-                'forceps', 'for', 'four', 'fours', 'force', 'forces',
-                'sense', 'foreceps', 'for steps', 'four steps',
+            'red': { 'red', 'right'
+                #'forceps', 'for', 'four', 'fours', 'force', 'forces',
+                #'sense', 'foreceps', 'for steps', 'four steps',
             },
-            'scalpel': {
-                'scalpel', 'scalp', 'scalped', 'scalpal', 'skull pill',
-                'scalple',
+            'yellow': { 'yeah'
+                #'scalpel', 'scalp', 'scalped', 'scalpal', 'skull pill',
+                #'scalple',
             },
-            'retractor': {
-                'retractor', 'retract', 'retractors', 'protractor',
-                'reactor', 'attractor', 're tractor',
+            'blue': { 'do','woah'
+                #'retractor', 'retract', 'retractors', 'protractor',
+                #'reactor', 'attractor', 're tractor',
             },
         }
 

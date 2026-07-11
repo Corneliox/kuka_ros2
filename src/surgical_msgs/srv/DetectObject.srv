@@ -1,0 +1,12 @@
+# DetectObject.srv
+#
+# Place this file in your package's srv/ folder (e.g. surgical_msgs/srv/),
+# add it to CMakeLists.txt's rosidl_generate_interfaces() call alongside
+# TaskPickPlace.srv, and rebuild (colcon build). After that it's importable
+# as:  from surgical_msgs.srv import DetectObject
+
+string color_name
+---
+bool found
+float64 x
+float64 y

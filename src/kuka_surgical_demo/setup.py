@@ -1,9 +1,7 @@
 from setuptools import find_packages, setup
 from glob import glob
 import os
-
 package_name = 'kuka_surgical_demo'
-
 # Collect all Vosk model files recursively
 model_files = []
 for path in glob('kuka_surgical_demo/vosk-model-small-en-us/**/*', recursive=True):
@@ -13,7 +11,6 @@ for path in glob('kuka_surgical_demo/vosk-model-small-en-us/**/*', recursive=Tru
             os.path.dirname(path)
         )
         model_files.append((install_path, [path]))
-
 setup(
     name=package_name,
     version='0.0.1',
@@ -42,14 +39,13 @@ setup(
             'surgical_pick_place = kuka_surgical_demo.surgical_pick_place:main',
             'multi_instrument_pick_place = kuka_surgical_demo.multi_instrument_pick_place:main',
             'surgical_control_server = kuka_surgical_demo.surgical_control_server:main',
-            'vision_logic_mock = kuka_surgical_demo.vision_logic_mock:main',
-            'voice_terminal_mock = kuka_surgical_demo.voice_terminal_mock:main',
             'voice_ai_node = kuka_surgical_demo.voice_ai_node:main',
-            'voice_grid_controller = kuka_surgical_demo.voice_grid_controller:main',
+            'voice_terminal_mock = kuka_surgical_demo.voice_terminal_mock:main',
             'voice_bridge_node = kuka_surgical_demo.voice_bridge:main',
             'bridge_node = kuka_surgical_demo.bridge_node:main',
-            'palm_approach_node = kuka_surgical_demo.palm_approach_node:main',
-            'vision_node = kuka_surgical_demo.vision:main',
+            'vision_node = kuka_surgical_demo.vision_node:main',
+            'vision_debug = kuka_surgical_demo.vision:main',
+            'pick_place_coordinator = kuka_surgical_demo.pick_place_coordinator:main',
             'hover_xy_node = kuka_surgical_demo.hover_xy_node:main',
             'axis_node = kuka_surgical_demo.axis_sweep:main',
         ],

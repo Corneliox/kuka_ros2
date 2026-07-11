@@ -4,6 +4,21 @@ surgical_control_server.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Exposes /execute_task (TaskPickPlace.srv).
 
+CHANGES (2026-07-09):
+  - ORI, ORIENTATION_TOLERANCE_RAD, and the PARK pose now import from
+    kuka_surgical_demo.pick_place_constants instead of being hardcoded
+    here separately -- this is the single source of truth shared with
+    pick_place_coordinator.py and vision_node.py.
+  - PARK is now the SAME pose used as the pre-detection observation
+    pose (PARK_X_M/Y_M/Z_M/PARK_ORI_*), not a separate generic resting
+    spot. Ending every task there means the arm is already correctly
+    positioned for the next detection cycle -- no extra hop through
+    two different "park" positions.
+  - move_to() now accepts an optional `orientation` dict, defaulting to
+    the pick/place gripper orientation (ORI). The final park step passes
+    PARK_ORI explicitly, since the observation pose's orientation is
+    genuinely different from the pick/place orientation.
+
 Gripper architecture
 ────────────────────
   This node does NOT open an EKI socket. Instead it publishes
@@ -13,44 +28,22 @@ Gripper architecture
   robot motion commands. This avoids the EKI single-client-per-
   channel constraint that would otherwise block motion commands.
 
-Calibration basis (2026-06-25, SmartPad ground truth — with gripper)
-─────────────────────────────────────────────────────────────────────
-  Suction tip on green mat corners (Tool 111 [1], Base $NULLFRAME [0]):
-    Centre:        X=415.68  Y=-1.80   Z=53.50  A=174.00  B=44.72  C=175.09
-    Top-right:     X=546.66  Y=-212.09 Z=55.36  A=173.95  B=44.72  C=175.03
-    Bottom-right:  X=285.90  Y=-212.09 Z=53.71  A=173.95  B=44.72  C=175.03
-    Bottom-left:   X=285.90  Y=208.45  Z=57.01  A=173.95  B=44.72  C=175.03
-    Top-left:      X=544.88  Y=208.73  Z=54.28  A=174.01  B=44.69  C=175.07
-
-  Corrected centre (without gripper):
-    X=440.60  Y=-0.97  Z=2.95  A=-180.00  B=0.00  C=180.00
-
-  Derived orientation quaternion (ZYX: A=174°, B=44.72°, C=175.09°):
-    qx=0.0321  qy=0.9235  qz=0.0197  qw=0.3816
-
 Z reference values (tool0, base_link frame, with gripper mounted)
 ──────────────────────────────────────────────────────────────────
-  Z_TABLE      = +53.50 mm  (tip on mat = tool0 Z in working pose)
-  INST_H       = +10 mm     (object height off mat surface)
-  pick_z(H)    = Z_TABLE + H
+  Fixed pick height (PICK_Z_M) now comes from pick_place_constants --
+  all objects are uniform 2x2x2cm cubes, no per-object height lookup.
   APPROACH_CLEARANCE = 120 mm
-  Z_SAFE       = +250 mm    (must be above approach height of ~174mm)
-
-Tray geometry (from physical corner measurements, base_link frame)
-──────────────────────────────────────────────────────────────────
-  X range: 285.9 → 546.7 mm  → centre X = 416.3 mm
-  Y range: -212.1 → 208.7 mm → centre Y = -1.7 mm (≈ 0)
-  Instruments spaced 60mm apart in Y, centred on tray.
+  Z_SAFE       = +250 mm    (must be above approach height)
 
 Collision strategy
 ──────────────────
-  Only the three instrument boxes (scalpel, forceps, retractor) are
-  added to the MoveIt planning scene. The instrument_tray and
-  table_surface slabs are NOT added — they caused link_5/6 collision
-  during LIN descent and the remove/restore workaround caused an
-  executor deadlock (blocking spin_until_future_complete inside async).
-  The instrument boxes are still needed so MoveIt tracks them for the
-  remove_object() → attach_object() pick sequence.
+  Only per-object collision boxes (if ever added) get attached/detached
+  around the grasp. The table/tray surface is NOT added as a static
+  collision object -- it previously caused link_5/6 collision during
+  LIN descent and a remove/restore workaround caused an executor
+  deadlock (blocking spin_until_future_complete inside async). The
+  attach_object()/detach_object() sequence still functions correctly
+  with no static world objects present.
 
 Motion sequence (6 steps)
 ──────────────────────────
@@ -59,7 +52,7 @@ Motion sequence (6 steps)
   3. Gripper ON → PTP arc to above place → Re-enable tray collisions
   4. LIN down to place contact
   5. Gripper OFF → LIN retract
-  6. PTP to park
+  6. PTP to PARK (== observation pose, PARK_ORI orientation)
 
 Velocity
 ────────
@@ -89,39 +82,35 @@ from moveit_msgs.srv import ApplyPlanningScene
 from moveit_msgs.action import MoveGroup
 from surgical_msgs.srv import TaskPickPlace
 
+from kuka_surgical_demo.pick_place_constants import (
+    ORI_X, ORI_Y, ORI_Z, ORI_W, ORIENTATION_TOLERANCE_RAD,
+    PICK_Z_M, APPROACH_CLEARANCE_M, Z_SAFE_M,
+    WS_X_MIN, WS_X_MAX, WS_Y_MIN, WS_Y_MAX, WS_Z_MIN, WS_Z_MAX,
+    PARK_X_M, PARK_Y_M, PARK_Z_M,
+    PARK_ORI_X, PARK_ORI_Y, PARK_ORI_Z, PARK_ORI_W,
+)
+
 # ── Frames ────────────────────────────────────────────────────────────────────
 FRAME = 'base_link'
 TIP   = 'tool0'
 
 GRIPPER_CMD_TOPIC = '/gripper_cmd'
 
-# ── Orientation (2026-06-25 ground truth: A=174°, B=44.72°, C=175.09°) ────────
-ORI = dict(qx=0.0321, qy=0.9235, qz=0.0197, qw=0.3816)
+# ── Orientation (imported from pick_place_constants -- single source of truth) ─
+ORI = dict(qx=ORI_X, qy=ORI_Y, qz=ORI_Z, qw=ORI_W)
+PARK_ORI = dict(qx=PARK_ORI_X, qy=PARK_ORI_Y, qz=PARK_ORI_Z, qw=PARK_ORI_W)
 
-# ── Z reference values (metres, tool0, base_link frame, gripper mounted) ──────
-Z_TABLE            =  0.05350
-INST_H             =  0.010
-APPROACH_CLEARANCE =  0.120
-Z_SAFE             =  0.250
+APPROACH_CLEARANCE = APPROACH_CLEARANCE_M
+Z_SAFE = Z_SAFE_M
 
-def pick_z(obj_h: float) -> float:
-    return Z_TABLE + obj_h
+def approach_z(z_contact: float) -> float:
+    return z_contact + APPROACH_CLEARANCE
 
-def approach_z(obj_h: float) -> float:
-    return pick_z(obj_h) + APPROACH_CLEARANCE
+# ── Workspace bounds (imported) ───────────────────────────────────────────────
+# (WS_X_MIN etc. imported directly above)
 
-# ── Workspace bounds ──────────────────────────────────────────────────────────
-WS_X_MIN, WS_X_MAX =  0.250,  0.600
-WS_Y_MIN, WS_Y_MAX = -0.860,  0.250
-WS_Z_MIN, WS_Z_MAX =  0.030,  0.600
-
-# ── Tray geometry ─────────────────────────────────────────────────────────────
-TRAY_CENTRE_X =  0.4163
-TRAY_CENTRE_Y = -0.0017
-TRAY_Z        =  0.0535
-
-# ── Park position ─────────────────────────────────────────────────────────────
-PARK_X, PARK_Y, PARK_Z = 0.40, 0.00, 0.40
+# ── Park position == observation pose (imported) ─────────────────────────────
+PARK_X, PARK_Y, PARK_Z = PARK_X_M, PARK_Y_M, PARK_Z_M
 
 # ── Velocity scaling ──────────────────────────────────────────────────────────
 VEL_TRANSIT = 0.05
@@ -244,9 +233,10 @@ class SurgicalControlServer(Node):
         if not await self.move_to(dx, dy, place_app, 'LIN', VEL_NEAR):
             return self._fail(response, 'Place retract failed')
 
-        # ── 6. Park ───────────────────────────────────────────────────────────
-        self.get_logger().info('  [6/6] Parking (PTP)')
-        await self.move_to(PARK_X, PARK_Y, PARK_Z, 'PTP', VEL_TRANSIT)
+        # ── 6. Park == observation pose (own orientation, NOT gripper ORI) ────
+        self.get_logger().info('  [6/6] Parking at observation pose (PTP)')
+        await self.move_to(PARK_X, PARK_Y, PARK_Z, 'PTP', VEL_TRANSIT,
+                            orientation=PARK_ORI)
 
         self.get_logger().info(f'=== Complete: {obj.upper()} ===')
         response.success = True
@@ -308,8 +298,6 @@ class SurgicalControlServer(Node):
         aco.touch_links = [
             'tool0', 'gripper_gripper_base',
             'gripper_suction_cup', 'gripper_tcp',
-            'scalpel', 'forceps', 'retractor',
-            'instrument_tray',
         ]
         scene = PlanningScene()
         scene.is_diff = True
@@ -335,25 +323,25 @@ class SurgicalControlServer(Node):
 
     def setup_surgical_scene(self):
         self.get_logger().info('=== Building surgical scene ===')
-        # No collision objects added to the planning scene.
-        # The instrument boxes (scalpel, forceps, retractor) were causing
-        # link_4/5/6 collision during every transit because the robot's
-        # forearm geometry sweeps through the tray footprint in this pose.
-        # The remove_object() / attach_object() / detach_object() sequence
-        # still functions correctly with no world objects present.
+        # No static collision objects added -- see module docstring.
         self.get_logger().info('=== Scene ready ===')
 
     # ── Motion ────────────────────────────────────────────────────────────────
 
-    async def move_to(self, x, y, z, planner='PTP', vel=VEL_NEAR):
+    async def move_to(self, x, y, z, planner='PTP', vel=VEL_NEAR, orientation=None):
+        """orientation: optional dict(qx,qy,qz,qw). Defaults to the gripper
+        pick/place orientation (ORI). Pass PARK_ORI explicitly for the park
+        step, since the observation pose's orientation genuinely differs."""
+        ori_to_use = orientation if orientation is not None else ORI
+
         target = Pose()
         target.position.x = x
         target.position.y = y
         target.position.z = z
-        target.orientation.x = ORI['qx']
-        target.orientation.y = ORI['qy']
-        target.orientation.z = ORI['qz']
-        target.orientation.w = ORI['qw']
+        target.orientation.x = ori_to_use['qx']
+        target.orientation.y = ori_to_use['qy']
+        target.orientation.z = ori_to_use['qz']
+        target.orientation.w = ori_to_use['qw']
 
         req = MotionPlanRequest()
         req.group_name = 'manipulator'
@@ -380,9 +368,9 @@ class SurgicalControlServer(Node):
         ori.header.frame_id = FRAME
         ori.link_name = TIP
         ori.orientation = target.orientation
-        ori.absolute_x_axis_tolerance = 0.05
-        ori.absolute_y_axis_tolerance = 0.05
-        ori.absolute_z_axis_tolerance = 0.05
+        ori.absolute_x_axis_tolerance = ORIENTATION_TOLERANCE_RAD
+        ori.absolute_y_axis_tolerance = ORIENTATION_TOLERANCE_RAD
+        ori.absolute_z_axis_tolerance = ORIENTATION_TOLERANCE_RAD
         ori.weight = 1.0
 
         goal_con = Constraints()
@@ -407,6 +395,13 @@ class SurgicalControlServer(Node):
             self.get_logger().info('  ✓ SUCCESS')
             return True
         self.get_logger().error(f'  ✗ FAILED (error_code={code})')
+        if code == -31:
+            self.get_logger().error(
+                '    -31 = NO_IK_SOLUTION. Likely a genuine reachability limit '
+                'at this (x,y) with the fixed orientation constraint -- see '
+                'notes on workspace-edge picks near the base. Not necessarily '
+                'a bug; consider whether this pick location is too close to '
+                'the base/workspace boundary.')
         return False
 
 
