@@ -50,7 +50,7 @@ Motion sequence (6 steps)
   1. PTP to pick XY at transit_z
   2. Disable tray collisions → LIN down to contact
   3. Gripper ON → PTP arc to above place → Re-enable tray collisions
-  4. LIN down to place contact
+  4. PTP down to place contact (see move_to() call for why -- not LIN)
   5. Gripper OFF → LIN retract
   6. PTP to PARK (== observation pose, PARK_ORI orientation)
 
@@ -219,9 +219,9 @@ class SurgicalControlServer(Node):
         if not await self.move_to(dx, dy, transit_z, 'PTP', VEL_TRANSIT):
             return self._fail(response, 'Transit to place column failed')
 
-        # ── 4. LIN down to place contact ──────────────────────────────────────
-        self.get_logger().info('  [4/6] Place → contact (LIN)')
-        if not await self.move_to(dx, dy, dz, 'LIN', VEL_NEAR):
+        # ── 4. Down to place contact (PTP, not LIN -- see note below) ────────
+        self.get_logger().info('  [4/6] Place → contact (PTP)')
+        if not await self.move_to(dx, dy, dz, 'PTP', VEL_NEAR):
             return self._fail(response, 'Place contact failed')
 
         self._send_gripper(0)
