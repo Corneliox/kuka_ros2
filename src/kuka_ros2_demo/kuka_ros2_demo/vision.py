@@ -30,7 +30,7 @@ Prereqs:
   5. surgical_control_server.py subscriber addition — see bottom of file
 
 Run:
-  ros2 run kuka_surgical_demo vision_node --ros-args \
+  ros2 run kuka_ros2_demo vision_node --ros-args \
     -p camera_topic:=/image_raw \
     -p camera_info_topic:=/camera_info \
     -p depth_model_path:=/home/emil/checkpoints/depth_anything_v2_metric_hypersim_vits.pth \

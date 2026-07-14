@@ -1,10 +1,10 @@
 from setuptools import find_packages, setup
 from glob import glob
 import os
-package_name = 'kuka_surgical_demo'
+package_name = 'kuka_ros2_demo'
 # Collect all Vosk model files recursively
 model_files = []
-for path in glob('kuka_surgical_demo/vosk-model-small-en-us/**/*', recursive=True):
+for path in glob('kuka_ros2_demo/vosk-model-small-en-us/**/*', recursive=True):
     if os.path.isfile(path):
         install_path = os.path.join(
             'lib/python3.12/site-packages',
@@ -36,19 +36,19 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'surgical_pick_place = kuka_surgical_demo.surgical_pick_place:main',
-            'multi_instrument_pick_place = kuka_surgical_demo.multi_instrument_pick_place:main',
-            'surgical_control_server = kuka_surgical_demo.surgical_control_server:main',
-            'voice_ai_node = kuka_surgical_demo.voice_ai_node:main',
-            'voice_terminal_mock = kuka_surgical_demo.voice_terminal_mock:main',
-            'voice_bridge_node = kuka_surgical_demo.voice_bridge:main',
-            'bridge_node = kuka_surgical_demo.bridge_node:main',
-            'vision_node = kuka_surgical_demo.vision_node:main',
-            'vision_debug = kuka_surgical_demo.vision:main',
-            'pick_place_coordinator = kuka_surgical_demo.pick_place_coordinator:main',
-            'hover_xy_node = kuka_surgical_demo.hover_xy_node:main',
-            'axis_node = kuka_surgical_demo.axis_sweep:main',
-            'grid_node = kuka_surgical_demo.grid_coordinator:main',
+            'surgical_pick_place = kuka_ros2_demo.surgical_pick_place:main',
+            'multi_instrument_pick_place = kuka_ros2_demo.multi_instrument_pick_place:main',
+            'surgical_control_server = kuka_ros2_demo.surgical_control_server:main',
+            'voice_ai_node = kuka_ros2_demo.voice_ai_node:main',
+            'voice_terminal_mock = kuka_ros2_demo.voice_terminal_mock:main',
+            'voice_bridge_node = kuka_ros2_demo.voice_bridge:main',
+            'bridge_node = kuka_ros2_demo.bridge_node:main',
+            'vision_node = kuka_ros2_demo.vision_node:main',
+            'vision_debug = kuka_ros2_demo.vision:main',
+            'pick_place_coordinator = kuka_ros2_demo.pick_place_coordinator:main',
+            'hover_xy_node = kuka_ros2_demo.hover_xy_node:main',
+            'axis_node = kuka_ros2_demo.axis_sweep:main',
+            'grid_node = kuka_ros2_demo.grid_coordinator:main',
         ],
     },
 )

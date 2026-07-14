@@ -48,7 +48,7 @@ from moveit_msgs.msg import (
 from shape_msgs.msg import SolidPrimitive
 from surgical_msgs.srv import TaskPickPlace, DetectObject
 
-from kuka_surgical_demo.pick_place_constants import (
+from kuka_ros2_demo.pick_place_constants import (
     ORI_X, ORI_Y, ORI_Z, ORI_W, ORIENTATION_TOLERANCE_RAD,
     PICK_Z_M, HANDOFF_X_M, HANDOFF_Y_M, HANDOFF_Z_M,
     PARK_X_M, PARK_Y_M, PARK_Z_M,

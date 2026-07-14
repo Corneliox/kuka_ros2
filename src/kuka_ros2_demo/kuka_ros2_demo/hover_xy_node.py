@@ -10,14 +10,14 @@ If bridge_node is NOT running → motion shows in RViz only (display_planned_pat
 No gripper attached — A6 is empty.
 
 Usage (simulation / RViz):
-  ros2 run kuka_surgical_demo hover_xy_node
+  ros2 run kuka_ros2_demo hover_xy_node
 
 Send a target:
   ros2 topic pub --once /target_xy geometry_msgs/msg/Point \
       "{x: 400.0, y: 0.0, z: 0.0}"
 
   z field is ignored — hover height is fixed via ~hover_z_mm parameter:
-    ros2 run kuka_surgical_demo hover_xy_node --ros-args -p hover_z_mm:=400.0
+    ros2 run kuka_ros2_demo hover_xy_node --ros-args -p hover_z_mm:=400.0
 """
 
 import rclpy

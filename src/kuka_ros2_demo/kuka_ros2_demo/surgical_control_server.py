@@ -6,7 +6,7 @@ Exposes /execute_task (TaskPickPlace.srv).
 
 CHANGES (2026-07-09):
   - ORI, ORIENTATION_TOLERANCE_RAD, and the PARK pose now import from
-    kuka_surgical_demo.pick_place_constants instead of being hardcoded
+    kuka_ros2_demo.pick_place_constants instead of being hardcoded
     here separately -- this is the single source of truth shared with
     pick_place_coordinator.py and vision_node.py.
   - PARK is now the SAME pose used as the pre-detection observation
@@ -82,7 +82,7 @@ from moveit_msgs.srv import ApplyPlanningScene
 from moveit_msgs.action import MoveGroup
 from surgical_msgs.srv import TaskPickPlace
 
-from kuka_surgical_demo.pick_place_constants import (
+from kuka_ros2_demo.pick_place_constants import (
     ORI_X, ORI_Y, ORI_Z, ORI_W, ORIENTATION_TOLERANCE_RAD,
     PICK_Z_M, APPROACH_CLEARANCE_M, Z_SAFE_M,
     WS_X_MIN, WS_X_MAX, WS_Y_MIN, WS_Y_MAX, WS_Z_MIN, WS_Z_MAX,
