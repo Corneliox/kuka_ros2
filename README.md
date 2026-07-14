@@ -42,6 +42,23 @@ surgical_sim_ws/
 | `kuka_eki` | Contains the lower-level KUKA EKI interface sources used by the teleop scripts and bridge nodes. |
 | `kuka-external-control-sdk` | Includes an additional SDK tree that is present in the workspace. |
 
+## Main nodes in the surgical demo package
+
+The core ROS nodes under [src/kuka_surgical_demo/kuka_surgical_demo](src/kuka_surgical_demo/kuka_surgical_demo) are organized around motion, voice, and vision:
+
+- `bridge_node.py`: listens to MoveIt display trajectories and palm targets, then converts them into EKI PTP commands for the KUKA controller.
+- `voice_bridge.py`: bridges voice-driven commands into the rest of the surgical workflow and is used by the voice-control pipeline.
+- `vision_node.py`: exposes a trigger-based object-detection service at `/detect_object` and returns detected object positions in metres for downstream pick/place logic.
+- `grid_coordinator.py`: runs a standalone grid-based pick/place demo by issuing MoveIt goals and gripper commands for a predefined set of grid positions.
+- `hover_xy_node.py`: accepts `/target_xy` inputs and plans a MoveIt hover motion at a fixed height for quick XY targeting.
+- `axis_sweep.py`: utility node for sweeping candidate XY points and checking which ones are reachable under the current orientation and hover configuration.
+- `surgical_pick_place.py`: a higher-level pick-and-place demo that builds a surgical scene and executes a simple pick/place sequence.
+- `multi_instrument_pick_place.py`: a more advanced multi-instrument variant with attached-object handling and multi-step handoff logic.
+- `voice_ai_node.py`: offline speech-recognition node using Vosk; it listens to microphone input and publishes recognized commands to `/voice_command`.
+- `voice_terminal_mock.py`: simple terminal-based substitute for voice input, publishing the same `/voice_command` topic so the system can be tested without audio.
+
+The package setup also exposes additional console entry points such as `pick_place_coordinator`, `surgical_control_server`, and `grid_node` for orchestration-style workflows.
+
 ## Build and source
 
 From the workspace root:
