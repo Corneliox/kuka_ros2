@@ -18,7 +18,7 @@ kuka_ros2/
     ├── kuka_eki_bridge/    # ROS 2 bridge nodes for EKI and gripper/vision flows
     ├── kuka-external-control-sdk/  # External SDK sources
     ├── kuka_robot_descriptions/    # URDFs, meshes, MoveIt configs, and KUKA support packages
-    ├── kuka_surgical_demo/ # Surgical demo nodes, voice/vision logic, and pick/place orchestration
+    ├── kuka_ros2_demo/     # Demo nodes, voice/vision logic, and pick/place orchestration
     ├── kuka_vacuum_gripper/# Vacuum gripper URDF/Xacro definitions
     └── surgical_msgs/      # Custom ROS 2 interfaces
 ```
@@ -35,16 +35,16 @@ kuka_ros2/
 | Package | Current purpose |
 | --- | --- |
 | `kuka_eki_bridge` | Provides bridge executables for EKI motion, gripper control, vision-driven actions, and voice-based bridging. |
-| `kuka_surgical_demo` | Contains the surgical pick/place demo, voice AI, vision nodes, coordination nodes, and the current grid-based orchestration logic. |
+| `kuka_ros2_demo` | Contains the pick/place demo, voice AI, vision nodes, coordination nodes, and the current grid-based orchestration logic. |
 | `kuka_robot_descriptions` | Supplies the KUKA robot URDFs and MoveIt-related configuration packages, including `kuka_kr_moveit_config`. |
 | `kuka_vacuum_gripper` | Holds the vacuum gripper model definitions. |
 | `surgical_msgs` | Defines custom ROS 2 message/service interfaces used by the demo stack. |
 | `kuka_eki` | Contains the lower-level KUKA EKI interface sources used by the teleop scripts and bridge nodes. |
 | `kuka-external-control-sdk` | Includes an additional SDK tree that is present in the workspace. |
 
-## Main nodes in the surgical demo package
+## Main nodes in the demo package
 
-The core ROS nodes under [src/kuka_surgical_demo/kuka_surgical_demo](src/kuka_surgical_demo/kuka_surgical_demo) are organized around motion, voice, and vision:
+The core ROS nodes under [src/kuka_ros2_demo/kuka_ros2_demo](src/kuka_ros2_demo/kuka_ros2_demo) are organized around motion, voice, and vision:
 
 - `bridge_node.py`: listens to MoveIt display trajectories and palm targets, then converts them into EKI PTP commands for the KUKA controller.
 - `voice_bridge.py`: bridges voice-driven commands into the rest of the surgical workflow and is used by the voice-control pipeline.
@@ -72,7 +72,7 @@ source install/setup.bash
 If you only want to rebuild a subset of packages during development, you can target them explicitly, for example:
 
 ```bash
-colcon build --packages-select kuka_surgical_demo kuka_eki_bridge kuka_robot_descriptions surgical_msgs
+colcon build --packages-select kuka_ros2_demo kuka_eki_bridge kuka_robot_descriptions surgical_msgs
 ```
 
 ## Example launch and run commands
@@ -97,15 +97,15 @@ ros2 run kuka_eki_bridge gripper_bridge
 ros2 run kuka_eki_bridge vision_gripper_bridge
 ```
 
-### Surgical demo nodes
+### Demo nodes
 
-The surgical demo package exposes several console scripts, including:
+The demo package exposes several console scripts, including:
 
 ```bash
-ros2 run kuka_surgical_demo voice_ai_node
-ros2 run kuka_surgical_demo voice_bridge_node
-ros2 run kuka_surgical_demo vision_node
-ros2 run kuka_surgical_demo grid_node
+ros2 run kuka_ros2_demo voice_ai_node
+ros2 run kuka_ros2_demo voice_bridge_node
+ros2 run kuka_ros2_demo vision_node
+ros2 run kuka_ros2_demo grid_node
 ```
 
 ### Direct hardware scripts
