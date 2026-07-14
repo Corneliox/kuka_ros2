@@ -59,7 +59,7 @@ DIST_COEFFS = np.array([
 
 # Default path -- override at launch with:
 #   ros2 run kuka_surgical_demo vision_node --ros-args -p homography_path:=/some/other/path.npy
-DEFAULT_HOMOGRAPHY_PATH = "/home/emil/surgical_sim_ws/src/kuka_surgical_demo/data/aruco_homography.npy"
+DEFAULT_HOMOGRAPHY_PATH = "/home/emil/kuka_ros2/src/kuka_surgical_demo/data/aruco_homography.npy"
 
 CAMERA_DEVICE_INDEX = 2  # matches your /tmp capture commands so far
 

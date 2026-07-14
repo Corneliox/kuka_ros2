@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 # Force Python to look in the kuka_eki directory regardless of bash environment
-sys.path.append(os.path.expanduser('~/surgical_sim_ws/src/kuka_eki'))
+sys.path.append(os.path.expanduser('~/kuka_ros2/src/kuka_eki'))
 
 import rclpy
 from rclpy.node import Node

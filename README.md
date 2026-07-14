@@ -1,11 +1,11 @@
-# Surgical Simulation Workspace
+# KUKA ROS2 Workspace
 
 This workspace is a ROS 2 Jazzy-based surgical manipulation setup centered on KUKA robot descriptions, MoveIt integration, and custom EKI-based bridge nodes for hardware execution. The current tree includes both ROS packages under [src](src) and a small set of root-level helper scripts for direct robot teleoperation.
 
 ## Current workspace layout
 
 ```text
-surgical_sim_ws/
+kuka_ros2/
 ├── README.md
 ├── build/                  # Colcon build artifacts
 ├── install/                # Colcon install space
