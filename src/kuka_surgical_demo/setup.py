@@ -48,6 +48,7 @@ setup(
             'pick_place_coordinator = kuka_surgical_demo.pick_place_coordinator:main',
             'hover_xy_node = kuka_surgical_demo.hover_xy_node:main',
             'axis_node = kuka_surgical_demo.axis_sweep:main',
+            'grid_node = kuka_surgical_demo.grid_coordinator:main',
         ],
     },
 )
