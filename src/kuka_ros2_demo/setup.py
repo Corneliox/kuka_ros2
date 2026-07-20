@@ -22,6 +22,7 @@ setup(
         ('share/' + package_name + '/launch', glob('launch/*.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
         ('share/' + package_name + '/models', glob('models/*.pt')),
+        ('share/' + package_name + '/data', [f for f in glob('data/**/*', recursive=True) if os.path.isfile(f)]),
     ] + model_files,
     install_requires=['setuptools'],
     zip_safe=True,

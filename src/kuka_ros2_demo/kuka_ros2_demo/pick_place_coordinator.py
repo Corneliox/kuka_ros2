@@ -45,6 +45,15 @@ RECOVERY:
 NOTE on KNOWN_SCREW_CLASSES: imported from hardware_database.py, the same
 dependency-free module vision_detect_node.py's SCREW_DATABASE lives in.
 Both nodes stay in sync automatically -- no hand-duplicated lists here.
+
+PARK MOVE (2026-07-XX): now joint-space (PARK_JOINTS_RAD), not Cartesian.
+Specifying the exact joint angles removes any ambiguity about which IK
+solution branch the planner would otherwise pick to reach an equivalent
+Cartesian pose -- exactly the kind of thing that caused joint_1 velocity
+blowups we chased down earlier (see surgical_control_server.py notes on
+the handoff descent fix). This reproduces the EXACT physical configuration
+every time, which matters a lot here since the homography is only valid
+at this exact camera pose.
 """
 
 import math
@@ -56,27 +65,19 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import String
 from geometry_msgs.msg import Pose
 from moveit_msgs.action import MoveGroup as MoveGroupAction
-from moveit_msgs.msg import (
-    MotionPlanRequest, Constraints,
-    PositionConstraint, OrientationConstraint, BoundingVolume,
-)
-from shape_msgs.msg import SolidPrimitive
+from moveit_msgs.msg import MotionPlanRequest, Constraints, JointConstraint
 from surgical_msgs.srv import TaskPickPlace, DetectObject, DetectObjectYolo
 
 from kuka_ros2_demo.pick_place_constants import (
-    ORI_X, ORI_Y, ORI_Z, ORI_W, ORIENTATION_TOLERANCE_RAD,
-    PICK_Z_M, HANDOFF_X_M, HANDOFF_Y_M, HANDOFF_Z_M,
-    PARK_X_M, PARK_Y_M, PARK_Z_M,
-    PARK_ORI_X, PARK_ORI_Y, PARK_ORI_Z, PARK_ORI_W,
+    ORI_X, ORI_Y, ORI_Z, ORI_W,
+    HANDOFF_X_M, HANDOFF_Y_M, HANDOFF_Z_M,
+    PARK_JOINTS_RAD, get_pick_z_for_object,
 )
 
-KNOWN_COLORS = {"red", "blue", "green", "yellow"}
-
-from kuka_ros2_demo.hardware_database import KNOWN_SCREW_CLASSES
+from kuka_ros2_demo.hardware_database import KNOWN_COLORS, KNOWN_SCREW_CLASSES
 
 PLANNING_GROUP = "manipulator"
-PLANNING_FRAME = "world"
-EEF_LINK = "tool0"
+JOINT_NAMES = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6']
 
 # ── Recovery tuning ────────────────────────────────────────────────────────
 FAILED_POSITION_RADIUS_M = 0.03   # 3cm -- close enough to call it "the same spot"
@@ -164,6 +165,8 @@ class PickPlaceCoordinator(Node):
     # ── only valid at this exact pose) ────────────────────────────────────
 
     def _build_park_goal(self):
+        """Joint-space park target -- deliberately NOT Cartesian. See module
+        docstring for why."""
         goal = MoveGroupAction.Goal()
         req = MotionPlanRequest()
         req.group_name = PLANNING_GROUP
@@ -175,35 +178,14 @@ class PickPlaceCoordinator(Node):
         req.max_acceleration_scaling_factor = 0.05
 
         constraints = Constraints()
-
-        pos_c = PositionConstraint()
-        pos_c.header.frame_id = PLANNING_FRAME
-        pos_c.link_name = EEF_LINK
-        box = SolidPrimitive()
-        box.type = SolidPrimitive.BOX
-        box.dimensions = [0.002, 0.002, 0.002]
-        bv = BoundingVolume()
-        bv.primitives.append(box)
-        p = Pose()
-        p.position.x, p.position.y, p.position.z = PARK_X_M, PARK_Y_M, PARK_Z_M
-        p.orientation.w = 1.0
-        bv.primitive_poses.append(p)
-        pos_c.constraint_region = bv
-        pos_c.weight = 1.0
-        constraints.position_constraints.append(pos_c)
-
-        ori_c = OrientationConstraint()
-        ori_c.header.frame_id = PLANNING_FRAME
-        ori_c.link_name = EEF_LINK
-        ori_c.orientation.x = PARK_ORI_X
-        ori_c.orientation.y = PARK_ORI_Y
-        ori_c.orientation.z = PARK_ORI_Z
-        ori_c.orientation.w = PARK_ORI_W
-        ori_c.absolute_x_axis_tolerance = ORIENTATION_TOLERANCE_RAD
-        ori_c.absolute_y_axis_tolerance = ORIENTATION_TOLERANCE_RAD
-        ori_c.absolute_z_axis_tolerance = ORIENTATION_TOLERANCE_RAD
-        ori_c.weight = 1.0
-        constraints.orientation_constraints.append(ori_c)
+        for name, position in zip(JOINT_NAMES, PARK_JOINTS_RAD):
+            jc = JointConstraint()
+            jc.joint_name = name
+            jc.position = position
+            jc.tolerance_above = 0.01
+            jc.tolerance_below = 0.01
+            jc.weight = 1.0
+            constraints.joint_constraints.append(jc)
 
         req.goal_constraints.append(constraints)
         goal.request = req
@@ -302,7 +284,8 @@ class PickPlaceCoordinator(Node):
             object_label = f'{target}_cube'
             self.get_logger().info(f'Detected "{target}" at x={x:.4f}m y={y:.4f}m')
 
-        pick_xyz = (x, y, PICK_Z_M)
+        pick_z = get_pick_z_for_object(object_label)
+        pick_xyz = (x, y, pick_z)
         place_xyz = (HANDOFF_X_M, HANDOFF_Y_M, HANDOFF_Z_M)
 
         task_req = TaskPickPlace.Request()

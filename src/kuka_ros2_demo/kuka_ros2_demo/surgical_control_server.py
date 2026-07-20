@@ -84,10 +84,11 @@ from surgical_msgs.srv import TaskPickPlace
 
 from kuka_ros2_demo.pick_place_constants import (
     ORI_X, ORI_Y, ORI_Z, ORI_W, ORIENTATION_TOLERANCE_RAD,
-    PICK_Z_M, APPROACH_CLEARANCE_M, Z_SAFE_M,
+    APPROACH_CLEARANCE_M, Z_SAFE_M,
     WS_X_MIN, WS_X_MAX, WS_Y_MIN, WS_Y_MAX, WS_Z_MIN, WS_Z_MAX,
     PARK_X_M, PARK_Y_M, PARK_Z_M,
     PARK_ORI_X, PARK_ORI_Y, PARK_ORI_Z, PARK_ORI_W,
+    get_pick_z_for_object,
 )
 
 # ── Frames ────────────────────────────────────────────────────────────────────
@@ -190,10 +191,19 @@ class SurgicalControlServer(Node):
         dy = request.place_pose.position.y
         dz = request.place_pose.position.z
 
-        for label, x, y, z in [('pick', px, py, pz), ('place', dx, dy, dz)]:
-            if not self._in_bounds(x, y, z):
-                return self._fail(response,
-                    f'{label} pose ({x:.3f},{y:.3f},{z:.3f}) outside workspace')
+        if pz <= 0.0:
+            requested_z = get_pick_z_for_object(obj)
+            self.get_logger().info(
+                f'Using object-specific pick height for {obj}: {requested_z:.5f} m')
+            pz = requested_z
+
+        # Only the PICK pose gets checked here. It comes from live vision output,
+        # which can occasionally be wrong. The PLACE/handoff pose is a fixed,
+        # already-proven-safe destination that is intentionally outside the
+        # table-region bounds and should not be rejected.
+        if not self._in_bounds(px, py, pz):
+            return self._fail(response,
+                f'pick pose ({px:.3f},{py:.3f},{pz:.3f}) outside workspace')
 
         pick_app  = pz + APPROACH_CLEARANCE
         place_app = dz + APPROACH_CLEARANCE

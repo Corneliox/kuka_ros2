@@ -46,7 +46,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from surgical_msgs.srv import DetectObjectYolo
 
-from kuka_ros2_demo.hardware_database import SCREW_DATABASE, CONFUSED_GROUP, PIXELS_PER_MM
+from kuka_ros2_demo.hardware_database import SCREW_DATABASE, CONFUSED_GROUP, PIXELS_PER_MM, NEVER_PICK_CLASSES
 
 
 def detect_if_silver(roi_image):
@@ -102,7 +102,7 @@ class VisionDetectNode(Node):
 
         self.declare_parameter('weights_path', '')
         self.declare_parameter('homography_path', '')
-        self.declare_parameter('camera_index', 0)
+        self.declare_parameter('camera_index', 2)
         self.declare_parameter('conf_threshold', 0.25)
 
         weights_path = self.get_parameter('weights_path').get_parameter_value().string_value
@@ -114,7 +114,7 @@ class VisionDetectNode(Node):
         # package's data/ dir, same convention vision_node.py already uses.
         pkg_share = get_package_share_directory('kuka_ros2_demo')
         if not weights_path:
-            weights_path = os.path.join(pkg_share, 'data', 'best.pt')
+            weights_path = os.path.join(pkg_share, 'data', 'best_v2.pt')
         if not homography_path:
             homography_path = os.path.join(pkg_share, 'data', 'aruco_homography.npy')
 
@@ -133,6 +133,10 @@ class VisionDetectNode(Node):
         self.get_logger().info(f"Loaded homography from {homography_path}")
 
         self.cap = cv2.VideoCapture(self.camera_index)
+        # Ask the driver for a minimal buffer -- not all V4L2 backends honor
+        # this, hence the explicit drain in handle_detect_object() below as
+        # a backstop.
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not self.cap.isOpened():
             self.get_logger().error(f"Could not open camera index {self.camera_index}")
             raise RuntimeError("Camera open failed")
@@ -153,6 +157,14 @@ class VisionDetectNode(Node):
     def handle_detect_object(self, request, response):
         target_class = request.target_class.strip() if request.target_class else ""
 
+        # Backstop for CAP_PROP_BUFFERSIZE not being honored by the backend:
+        # discard a few queued frames with grab() (cheap -- no decode) so the
+        # frame we actually decode below reflects the current scene, not
+        # whatever was sitting in the driver's buffer from before this
+        # request came in.
+        for _ in range(5):
+            self.cap.grab()
+
         ret, frame = self.cap.read()
         if not ret or frame is None:
             response.found = False
@@ -161,6 +173,11 @@ class VisionDetectNode(Node):
         results = self.model(frame, conf=self.conf_threshold, verbose=False)
 
         if len(results[0].boxes) == 0:
+            self.get_logger().info(
+                f'Raw YOLO output: 0 detections above conf={self.conf_threshold} '
+                f'(requested target_class="{target_class}"). '
+                f'Camera saw nothing above threshold -- check the tray is in frame '
+                f'and the camera_index parameter points at the right device.')
             response.found = False
             return response
 
@@ -169,15 +186,31 @@ class VisionDetectNode(Node):
         confs = boxes.conf.cpu().numpy()
         order = np.argsort(-confs)  # highest confidence first, not "first box in results"
 
+        raw_detections = [
+            (self.model.names[int(boxes.cls[i])], float(boxes.conf[i])) for i in order
+        ]
+        self.get_logger().info(f'Raw YOLO output ({len(raw_detections)} boxes): {raw_detections}')
+
         chosen_idx = None
         for idx in order:
             cls_name = self.model.names[int(boxes.cls[idx])]
+            # Hard exclusion: never let a NEVER_PICK_CLASSES detection (e.g.
+            # the ArUco marker) be selected as the pick target, even on an
+            # unfiltered request. This is enforced here, not just by
+            # omission from SCREW_DATABASE, so it can't be bypassed by
+            # accident.
+            if cls_name in NEVER_PICK_CLASSES:
+                continue
             if target_class and cls_name != target_class:
                 continue
             chosen_idx = int(idx)
             break
 
         if chosen_idx is None:
+            self.get_logger().info(
+                f'{len(raw_detections)} object(s) detected, but none matched '
+                f'requested target_class="{target_class}". Raw classes seen: '
+                f'{[c for c, _ in raw_detections]}')
             response.found = False
             return response
 

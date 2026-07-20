@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 6
+names: ['black_screw', 'clamp', 'golden_screw', 'hinge', 'marker', 'washer']
+
+roboflow:
+  workspace: kuka-f9mvf
+  project: joints-hamzz
+  version: 2
+  license: Private
+  url: https://app.roboflow.com/kuka-f9mvf/joints-hamzz/2
