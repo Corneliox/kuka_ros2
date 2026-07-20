@@ -1,0 +1,21 @@
+# DetectObjectYolo.srv
+#
+# Separate from DetectObject.srv (which stays exactly as it was, for the
+# color-detection path in vision_node.py). This one is for
+# vision_detect_node.py, the YOLO-based classification + ArUco-localization
+# node.
+#
+# Place in surgical_msgs/srv/, add to CMakeLists.txt's
+# rosidl_generate_interfaces() call alongside the existing srv files, then
+# colcon build. Importable as: from surgical_msgs.srv import DetectObjectYolo
+#
+# No z field: Z comes from pick_place_constants.PICK_Z_M when the coordinator
+# builds the pick pose for /execute_task, same convention as DetectObject.srv.
+
+string target_class
+---
+bool found
+float64 x
+float64 y
+string object_class
+float32 confidence

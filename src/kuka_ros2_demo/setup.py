@@ -44,11 +44,11 @@ setup(
             'voice_bridge_node = kuka_ros2_demo.voice_bridge:main',
             'bridge_node = kuka_ros2_demo.bridge_node:main',
             'vision_node = kuka_ros2_demo.vision_node:main',
-            'vision_debug = kuka_ros2_demo.vision:main',
             'pick_place_coordinator = kuka_ros2_demo.pick_place_coordinator:main',
             'hover_xy_node = kuka_ros2_demo.hover_xy_node:main',
             'axis_node = kuka_ros2_demo.axis_sweep:main',
             'grid_node = kuka_ros2_demo.grid_coordinator:main',
+            'detect_node = kuka_ros2_demo.vision_detect_node:main',
         ],
     },
 )

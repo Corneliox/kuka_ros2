@@ -24,6 +24,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/TaskPickPlace.srv"
   "srv/DetectObject.srv"
+  "srv/DetectObjectYolo.srv"
   DEPENDENCIES geometry_msgs
 )
 ament_package()
