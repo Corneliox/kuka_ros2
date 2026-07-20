@@ -11,7 +11,9 @@ __pycache__/
 
 *.zip
 
-*vosk-model*build/
+*vosk-model*
+
+build/
 install/
 log/
 
@@ -21,3 +23,9 @@ models/
 __pycache__/
 .vscode/
 .idea/
+
+YOLOv11/
+
+# Ignore YOLOV11 folder inside the kuka_ros2_demo package
+/src/kuka_ros2_demo/data/YOLOV11/
+/src/kuka_ros2_demo/data/yolov11/
