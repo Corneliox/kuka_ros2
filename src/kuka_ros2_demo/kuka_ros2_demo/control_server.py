@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-surgical_control_server.py
+control_server.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Exposes /execute_task (TaskPickPlace.srv).
 

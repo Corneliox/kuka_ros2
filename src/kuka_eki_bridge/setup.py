@@ -25,10 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
         'bridge_node = kuka_eki_bridge.bridge_node:main',
-        'nbridge_node = kuka_eki_bridge.nbridge_node:main',
         'voice_bridge_node = kuka_eki_bridge.voice_bridge:main',
         'gripper_bridge = kuka_eki_bridge.gripper_bridge:main',
-        'vision_gripper_bridge = kuka_eki_bridge.vision_gripper_bridge:main',
         ],
     },
 )
