@@ -73,7 +73,7 @@ COLOR_RANGES = {
     "green":  [(np.array([40, 80, 60]),  np.array([85, 255, 255]))],
     "blue":   [(np.array([95, 100, 60]), np.array([130, 255, 255]))],
 }
-MIN_CONTOUR_AREA_PX = 150
+MIN_CONTOUR_AREA_PX = 200
 MAX_CONTOUR_AREA_PX = 20000
 
 # Number of throwaway grab() calls before reading a real frame -- USB webcams

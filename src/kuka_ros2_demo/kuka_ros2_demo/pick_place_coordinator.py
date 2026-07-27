@@ -46,14 +46,17 @@ NOTE on KNOWN_SCREW_CLASSES: imported from hardware_database.py, the same
 dependency-free module vision_detect_node.py's SCREW_DATABASE lives in.
 Both nodes stay in sync automatically -- no hand-duplicated lists here.
 
-PARK MOVE (2026-07-XX): now joint-space (PARK_JOINTS_RAD), not Cartesian.
-Specifying the exact joint angles removes any ambiguity about which IK
-solution branch the planner would otherwise pick to reach an equivalent
-Cartesian pose -- exactly the kind of thing that caused joint_1 velocity
-blowups we chased down earlier (see surgical_control_server.py notes on
-the handoff descent fix). This reproduces the EXACT physical configuration
-every time, which matters a lot here since the homography is only valid
-at this exact camera pose.
+PARK MOVE (2026-07-XX): back to Cartesian, NOT joint-space. The prior
+joint-space PARK_JOINTS_RAD approach was dropped when the park joints were
+re-jogged on the SmartPad -- only the fresh Cartesian readout (position +
+orientation) was saved this time, not a re-derived joint solution, so
+there is no PARK_JOINTS_RAD to import anymore. pick_place_constants.py now
+carries PARK_X_M/PARK_Y_M/PARK_Z_M + PARK_ORI_X/Y/Z/W straight from the
+SmartPad "Actual position" readout (2026-07-09 ground truth), and the park
+goal is built the same way as every other motion in this pipeline: a
+Cartesian position + orientation constraint through MoveIt. This still
+reproduces the exact physical pose the homography was solved at -- it's
+just doing it via Cartesian target + IK instead of a fixed joint solution.
 """
 
 import math
@@ -63,21 +66,34 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import String
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseStamped
+from shape_msgs.msg import SolidPrimitive
 from moveit_msgs.action import MoveGroup as MoveGroupAction
-from moveit_msgs.msg import MotionPlanRequest, Constraints, JointConstraint
+from moveit_msgs.msg import (
+    MotionPlanRequest, Constraints, PositionConstraint, OrientationConstraint,
+)
 from surgical_msgs.srv import TaskPickPlace, DetectObject, DetectObjectYolo
 
 from kuka_ros2_demo.pick_place_constants import (
     ORI_X, ORI_Y, ORI_Z, ORI_W,
     HANDOFF_X_M, HANDOFF_Y_M, HANDOFF_Z_M,
-    PARK_JOINTS_RAD, get_pick_z_for_object,
+    PARK_X_M, PARK_Y_M, PARK_Z_M,
+    PARK_ORI_X, PARK_ORI_Y, PARK_ORI_Z, PARK_ORI_W,
+    ORIENTATION_TOLERANCE_RAD,
+    get_pick_z_for_object,
 )
 
 from kuka_ros2_demo.hardware_database import KNOWN_COLORS, KNOWN_SCREW_CLASSES
 
 PLANNING_GROUP = "manipulator"
-JOINT_NAMES = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6']
+BASE_FRAME_ID = "base_link"
+EE_LINK = "tool0"
+
+# ── Park move tuning ────────────────────────────────────────────────────────
+# Tight position tolerance -- the homography is only valid at this exact
+# pose, so we want the planner landing close to the SmartPad ground truth,
+# not just "close enough" for a generic Cartesian move.
+PARK_POSITION_TOLERANCE_M = 0.003
 
 # ── Recovery tuning ────────────────────────────────────────────────────────
 FAILED_POSITION_RADIUS_M = 0.03   # 3cm -- close enough to call it "the same spot"
@@ -165,8 +181,9 @@ class PickPlaceCoordinator(Node):
     # ── only valid at this exact pose) ────────────────────────────────────
 
     def _build_park_goal(self):
-        """Joint-space park target -- deliberately NOT Cartesian. See module
-        docstring for why."""
+        """Cartesian park target -- position + orientation constraints from
+        the SmartPad ground-truth readout. See module docstring for why this
+        is Cartesian again rather than joint-space."""
         goal = MoveGroupAction.Goal()
         req = MotionPlanRequest()
         req.group_name = PLANNING_GROUP
@@ -177,15 +194,41 @@ class PickPlaceCoordinator(Node):
         req.max_velocity_scaling_factor = 0.05
         req.max_acceleration_scaling_factor = 0.05
 
+        target_pose = PoseStamped()
+        target_pose.header.frame_id = BASE_FRAME_ID
+        target_pose.pose.position.x = PARK_X_M
+        target_pose.pose.position.y = PARK_Y_M
+        target_pose.pose.position.z = PARK_Z_M
+        target_pose.pose.orientation.x = PARK_ORI_X
+        target_pose.pose.orientation.y = PARK_ORI_Y
+        target_pose.pose.orientation.z = PARK_ORI_Z
+        target_pose.pose.orientation.w = PARK_ORI_W
+
+        pos_constraint = PositionConstraint()
+        pos_constraint.header.frame_id = BASE_FRAME_ID
+        pos_constraint.link_name = EE_LINK
+        pos_constraint.target_point_offset.x = 0.0
+        pos_constraint.target_point_offset.y = 0.0
+        pos_constraint.target_point_offset.z = 0.0
+        region = SolidPrimitive()
+        region.type = SolidPrimitive.SPHERE
+        region.dimensions = [PARK_POSITION_TOLERANCE_M]
+        pos_constraint.constraint_region.primitives.append(region)
+        pos_constraint.constraint_region.primitive_poses.append(target_pose.pose)
+        pos_constraint.weight = 1.0
+
+        ori_constraint = OrientationConstraint()
+        ori_constraint.header.frame_id = BASE_FRAME_ID
+        ori_constraint.link_name = EE_LINK
+        ori_constraint.orientation = target_pose.pose.orientation
+        ori_constraint.absolute_x_axis_tolerance = ORIENTATION_TOLERANCE_RAD
+        ori_constraint.absolute_y_axis_tolerance = ORIENTATION_TOLERANCE_RAD
+        ori_constraint.absolute_z_axis_tolerance = ORIENTATION_TOLERANCE_RAD
+        ori_constraint.weight = 1.0
+
         constraints = Constraints()
-        for name, position in zip(JOINT_NAMES, PARK_JOINTS_RAD):
-            jc = JointConstraint()
-            jc.joint_name = name
-            jc.position = position
-            jc.tolerance_above = 0.01
-            jc.tolerance_below = 0.01
-            jc.weight = 1.0
-            constraints.joint_constraints.append(jc)
+        constraints.position_constraints.append(pos_constraint)
+        constraints.orientation_constraints.append(ori_constraint)
 
         req.goal_constraints.append(constraints)
         goal.request = req

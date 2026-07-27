@@ -358,7 +358,7 @@ class SurgicalControlServer(Node):
         req.planner_id = planner
         req.pipeline_id = 'pilz_industrial_motion_planner'
         req.num_planning_attempts = 5
-        req.allowed_planning_time = 10.0
+        req.allowed_planning_time = 5.0
         req.max_velocity_scaling_factor = vel
         req.max_acceleration_scaling_factor = vel
 
