@@ -72,8 +72,13 @@ After Terminals 1–5 above are all running, connect to the real robot as follow
 
 **On the KUKA SmartPAD:**
 1. Flip the key to the right and switch from **T1** to **AUT**.
+   ![Key switch on the SmartPAD, turned to change operating mode](images/smartpad_key_switch_1.png)
+   ![Operation Mode screen showing T1 / AUT selection](images/smartpad_key_switch_2.png)
+   ![AUT selected, ROS_EKI shown as the controller](images/smartpad_select_aut.png)
 2. Select **ros_eki**.
+   ![Navigator showing ros_eki selected under Program](images/smartpad_select_ros_eki.png)
 3. Press the green and white buttons (start key) behind the SmartPAD to start the program.
+   ![Green and white start-key buttons on the back of the SmartPAD](images/smartpad_start_key_buttons.png)
 4. Press the green play button on the side to run the program.
    - To pause the robot at any time, press the red pause button.
 
@@ -135,12 +140,29 @@ The following markers are fixed to the workspace at these coordinates:
 | 10 | 422.84 | 174.79 |
 | 11 | 298.34 | 176.92 |
 
-
+```python
+MARKER_POINTS = [
+    {"id": 0,  "x_mm": 303.11,   "y_mm": 299.80},
+    {"id": 1,  "x_mm": 112.55,   "y_mm": -344.22},
+    {"id": 2,  "x_mm": 157.78,   "y_mm": -201.06},
+    {"id": 3,  "x_mm": 115.11,   "y_mm": 342.09},
+    {"id": 4,  "x_mm": 522.11,   "y_mm": 337.59},
+    {"id": 5,  "x_mm": 521.76,   "y_mm": 6.73},
+    {"id": 6,  "x_mm": 527.19,   "y_mm": -337.73},
+    {"id": 7,  "x_mm": 298.08, "y_mm": -344.08},
+    {"id": 8,  "x_mm": 293.85,   "y_mm": 9.34},
+    {"id": 9,  "x_mm": 216.57,   "y_mm": 174.20},
+    {"id": 10, "x_mm": 422.84,   "y_mm": 174.79},
+    {"id": 11, "x_mm": 298.34,   "y_mm": 176.92},
+]
+```
 
 ### 4.2 Positioning the wrist camera
 
 1. On the KUKA SmartPAD, press the white key and switch to **world frame**.
-2. Manually jog the arm using the **X, Y, Z** (position) and **A, B, C** (orientation)
+2. Go to **Menu > Display > Actual Position** to monitor the end effector's pose and
+   orientation live while you jog it into place.
+3. Manually jog the arm using the **X, Y, Z** (position) and **A, B, C** (orientation)
    buttons until the wrist-mounted camera has the full workspace in view (see reference
    image — all markers visible, workspace unobstructed).
 
