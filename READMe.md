@@ -140,22 +140,6 @@ The following markers are fixed to the workspace at these coordinates:
 | 10 | 422.84 | 174.79 |
 | 11 | 298.34 | 176.92 |
 
-```python
-MARKER_POINTS = [
-    {"id": 0,  "x_mm": 303.11,   "y_mm": 299.80},
-    {"id": 1,  "x_mm": 112.55,   "y_mm": -344.22},
-    {"id": 2,  "x_mm": 157.78,   "y_mm": -201.06},
-    {"id": 3,  "x_mm": 115.11,   "y_mm": 342.09},
-    {"id": 4,  "x_mm": 522.11,   "y_mm": 337.59},
-    {"id": 5,  "x_mm": 521.76,   "y_mm": 6.73},
-    {"id": 6,  "x_mm": 527.19,   "y_mm": -337.73},
-    {"id": 7,  "x_mm": 298.08, "y_mm": -344.08},
-    {"id": 8,  "x_mm": 293.85,   "y_mm": 9.34},
-    {"id": 9,  "x_mm": 216.57,   "y_mm": 174.20},
-    {"id": 10, "x_mm": 422.84,   "y_mm": 174.79},
-    {"id": 11, "x_mm": 298.34,   "y_mm": 176.92},
-]
-```
 
 ### 4.2 Positioning the wrist camera
 

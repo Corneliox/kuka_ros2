@@ -58,7 +58,7 @@ def generate_launch_description():
                 }.items(),
             ),
             Node(
-                package="kuka_ros2_demo",
+                package="kuka_eki_bridge",
                 executable="gripper_bridge",
                 name="gripper_bridge",
                 output="screen",
