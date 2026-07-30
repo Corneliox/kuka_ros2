@@ -1,0 +1,26 @@
+# eki_controllers.yaml
+#
+# Tells MoveGroup's trajectory_execution_manager that a single controller,
+# "eki_arm_controller", exists and implements FollowJointTrajectory at the
+# action namespace below. There is no controller_manager involved -- the
+# action server living at that namespace is kuka_eki_controller_node,
+# started as its own process (see eki_moveit_planning.launch.py / README).
+#
+# joints: must match the 6 revolute joint names in the URDF for your model
+# (adjust prefix if you launch with a non-empty `prefix` xacro arg).
+
+moveit_simple_controller_manager:
+  controller_names:
+    - eki_arm_controller
+
+  eki_arm_controller:
+    action_ns: follow_joint_trajectory
+    type: FollowJointTrajectory
+    default: true
+    joints:
+      - joint_1
+      - joint_2
+      - joint_3
+      - joint_4
+      - joint_5
+      - joint_6
