@@ -7,7 +7,9 @@ fine-tuning data. Runs alongside your existing scripted pipeline
 (vision_detect_node / vision_node + pick_place_coordinator +
 surgical_control_server) and taps:
 
-  - the wrist camera (same physical device your vision nodes read from)
+  - the wrist camera, via the /camera/image_raw topic published by
+    vision_node.py (see CAMERA NOTE below -- this node no longer opens
+    its own cv2.VideoCapture)
   - the robot's end-effector pose via TF (base_link -> tool0)
   - the last commanded gripper state (/gripper_cmd)
 
@@ -25,13 +27,13 @@ the lightweight style already used for /voice_command in this repo):
 
 Recording rate is fixed via the `record_hz` parameter (default 10 Hz,
 matching Octo's typical control rate) -- NOT distance-based. Each tick
-grabs whatever the current camera frame / EE pose / gripper state are,
-regardless of how far the arm moved since the last tick. A stalled
-moment (e.g. gripper closing while the arm holds still) is still its
-own step.
+grabs whatever the latest received camera frame / EE pose / gripper
+state are, regardless of how far the arm moved since the last tick. A
+stalled moment (e.g. gripper closing while the arm holds still) is
+still its own step.
 
 Per-step data captured:
-  - RGB image (wrist camera)            -> becomes image_primary
+  - RGB image (wrist camera, from /camera/image_raw) -> becomes image_primary
   - EE position + quaternion (TF)       -> becomes proprio; consecutive
                                             poses are subtracted later
                                             (in the RLDS conversion
@@ -45,9 +47,26 @@ Per-episode metadata:
   - success flag
   - step count, start/end wall-clock time
 
+CAMERA NOTE (2026-07):
+  This node used to open its own cv2.VideoCapture on the same device
+  index vision_node.py/vision_detect_node.py already use. Many UVC
+  webcam drivers refuse a second simultaneous reader on one device, or
+  silently starve one of the two consumers. vision_node.py now owns the
+  camera and publishes frames on /camera/image_raw at a fixed rate
+  (see its `publish_rate_hz` parameter); this node just subscribes.
+  Camera framerate and this node's `record_hz` are NOT phase-locked --
+  a recorded step's image can be up to one publish-interval stale. If
+  you need tighter sync, raise vision_node's publish_rate_hz well above
+  this node's record_hz (e.g. 20 Hz publish vs 10 Hz record).
+
+  If you are instead recording off the YOLO/hardware-class detection
+  path, apply the same /camera/image_raw publisher pattern to
+  vision_detect_node.py and point `camera_topic` there if it publishes
+  under a different name.
+
 Usage:
   ros2 run kuka_ros2_demo episode_recorder \
-      --ros-args -p camera_index:=2 -p record_hz:=10.0 \
+      --ros-args -p camera_topic:=/camera/image_raw -p record_hz:=10.0 \
       -p output_dir:=/home/emil/kuka_ros2/demo_data
 
   # In another terminal, once your scripted pick-and-place run starts:
@@ -56,16 +75,6 @@ Usage:
 
   # After the run finishes (object placed or dropped):
   ros2 topic pub --once /episode_end std_msgs/msg/Bool "{data: true}"
-
-NOTE on the camera: this recorder opens its own cv2.VideoCapture on the
-same camera index vision_node.py / vision_detect_node.py already use.
-Some UVC webcam drivers refuse a second simultaneous reader on one
-device -- if you hit that, the fix is to have one of the vision nodes
-publish frames on a sensor_msgs/Image topic and have this node
-subscribe to that topic instead of opening the device a second time.
-Left as cv2.VideoCapture here to match your existing nodes' pattern and
-get you recording quickly; swap to a topic subscription if a
-device-busy error shows up.
 
 RAW FORMAT ONLY: this script does NOT produce RLDS/TFDS directly. It
 writes one file per episode in a simple, inspectable numpy/json
@@ -76,6 +85,7 @@ you have real episodes on disk to convert.
 
 import json
 import os
+import threading
 import time
 from datetime import datetime
 
@@ -87,6 +97,8 @@ from rclpy.time import Time
 from rclpy.duration import Duration
 
 from std_msgs.msg import String, Bool, Int8
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 import tf2_ros
 
@@ -94,11 +106,10 @@ import tf2_ros
 FRAME = 'base_link'   # matches FRAME convention in surgical_control_server.py etc.
 TIP = 'tool0'         # matches TIP convention in the same nodes
 
-DEFAULT_CAMERA_INDEX = 2       # matches vision_node.py / vision_detect_node.py
+DEFAULT_CAMERA_TOPIC = '/camera/image_raw'   # published by vision_node.py
 DEFAULT_RECORD_HZ = 10.0
 DEFAULT_OUTPUT_DIR = os.path.expanduser('~/kuka_ros2/demo_data')
 
-BUFFER_FLUSH_FRAMES = 5        # same stale-frame flush trick as vision_node.py
 TF_LOOKUP_TIMEOUT_SEC = 0.05
 
 
@@ -107,23 +118,21 @@ class EpisodeRecorder(Node):
     def __init__(self):
         super().__init__('episode_recorder')
 
-        self.declare_parameter('camera_index', DEFAULT_CAMERA_INDEX)
+        self.declare_parameter('camera_topic', DEFAULT_CAMERA_TOPIC)
         self.declare_parameter('record_hz', DEFAULT_RECORD_HZ)
         self.declare_parameter('output_dir', DEFAULT_OUTPUT_DIR)
 
-        self.camera_index = self.get_parameter('camera_index').value
+        self.camera_topic = self.get_parameter('camera_topic').value
         self.record_hz = self.get_parameter('record_hz').value
         self.output_dir = self.get_parameter('output_dir').value
         os.makedirs(self.output_dir, exist_ok=True)
 
-        # -- Camera -----------------------------------------------------------
-        self.cap = cv2.VideoCapture(self.camera_index)
-        if not self.cap.isOpened():
-            self.get_logger().error(
-                f'Could not open camera index {self.camera_index}. '
-                f'Is it already held open by vision_node/vision_detect_node? '
-                f'See module docstring for the topic-subscription workaround.')
-            raise RuntimeError('Camera open failed')
+        # -- Camera (subscription, not a device we own) --------------------------
+        self.bridge = CvBridge()
+        self._latest_frame = None          # most recent bgr8 frame, as np array
+        self._latest_frame_stamp = None     # rclpy Time of that frame, for staleness logging
+        self._frame_lock = threading.Lock()
+        self.create_subscription(Image, self.camera_topic, self._image_cb, 10)
 
         # -- TF -----------------------------------------------------------------
         self.tf_buffer = tf2_ros.Buffer()
@@ -150,7 +159,7 @@ class EpisodeRecorder(Node):
         self._timer = self.create_timer(1.0 / self.record_hz, self._tick)
 
         self.get_logger().info(
-            f'episode_recorder ready. camera_index={self.camera_index} '
+            f'episode_recorder ready. camera_topic={self.camera_topic} '
             f'record_hz={self.record_hz} output_dir={self.output_dir}\n'
             f"  Start:  ros2 topic pub --once /episode_start std_msgs/msg/String "
             f"\"{{data: 'pick up the red cube and place it in the tray'}}\"\n"
@@ -159,6 +168,16 @@ class EpisodeRecorder(Node):
         )
 
     # -- Callbacks -----------------------------------------------------------------
+
+    def _image_cb(self, msg: Image):
+        try:
+            frame_bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().warn(f'cv_bridge conversion failed: {e}', throttle_duration_sec=5.0)
+            return
+        with self._frame_lock:
+            self._latest_frame = frame_bgr
+            self._latest_frame_stamp = msg.header.stamp
 
     def _gripper_cb(self, msg: Int8):
         self._gripper_state = int(msg.data)
@@ -169,6 +188,13 @@ class EpisodeRecorder(Node):
                 'Already recording an episode -- ignoring new /episode_start. '
                 'Send /episode_end first.')
             return
+        with self._frame_lock:
+            have_frame = self._latest_frame is not None
+        if not have_frame:
+            self.get_logger().warn(
+                f'No frame received yet on {self.camera_topic} -- is vision_node '
+                f'running and publishing? Starting anyway; early steps may be '
+                f'skipped until the first frame arrives.')
         self._instruction = msg.data.strip()
         self._images = []
         self._positions = []
@@ -193,14 +219,14 @@ class EpisodeRecorder(Node):
         if not self._recording:
             return
 
-        # Flush stale buffered frames so we grab a fresh one -- same trick
-        # vision_node.py uses before reading.
-        for _ in range(BUFFER_FLUSH_FRAMES):
-            self.cap.grab()
-        ok, frame_bgr = self.cap.read()
-        if not ok:
-            self.get_logger().warn('Camera read failed -- skipping this step.')
-            return
+        with self._frame_lock:
+            if self._latest_frame is None:
+                self.get_logger().warn(
+                    f'No frame received yet on {self.camera_topic} -- skipping this step.',
+                    throttle_duration_sec=2.0,
+                )
+                return
+            frame_bgr = self._latest_frame.copy()
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
         try:
@@ -246,6 +272,7 @@ class EpisodeRecorder(Node):
             'success': success,
             'n_steps': n_steps,
             'record_hz': self.record_hz,
+            'camera_topic': self.camera_topic,
             'start_wall_time': self._episode_start_wall,
             'end_wall_time': time.time(),
             'npz_file': os.path.basename(npz_path),
@@ -256,11 +283,6 @@ class EpisodeRecorder(Node):
         self.get_logger().info(
             f'Episode saved: {n_steps} steps -> {npz_path}  '
             f'(success={success}, instruction="{self._instruction}")')
-
-    def destroy_node(self):
-        if self.cap is not None:
-            self.cap.release()
-        super().destroy_node()
 
 
 def main(args=None):

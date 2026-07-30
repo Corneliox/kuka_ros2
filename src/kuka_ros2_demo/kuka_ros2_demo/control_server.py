@@ -19,6 +19,20 @@ CHANGES (2026-07-09):
     PARK_ORI explicitly, since the observation pose's orientation is
     genuinely different from the pick/place orientation.
 
+CHANGES (2026-07-28):
+  - Split the old step 3 ("PTP arc to above place") into 3a/3b: a LIN
+    straight-up retract to transit_z at the PICK xy, followed by a PTP
+    transit to above place -- both now happen at the same safe height.
+    Previously a single PTP went directly from the low pick-contact
+    pose to (dx, dy, transit_z). PTP interpolates in joint space, not
+    Cartesian space, so it made no guarantee about the tool's path
+    between those two points -- in practice this caused a low sweep
+    toward +X that could clip the workspace/tray on the way up. Since
+    the tool is now already at transit_z before any horizontal PTP
+    crossing happens, there is nothing below it left to hit. Mirrors
+    the retract-then-transit pattern already used on the place side
+    (steps 5 -> "park").
+
 Gripper architecture
 ────────────────────
   This node does NOT open an EKI socket. Instead it publishes
@@ -45,14 +59,15 @@ Collision strategy
   attach_object()/detach_object() sequence still functions correctly
   with no static world objects present.
 
-Motion sequence (6 steps)
+Motion sequence (7 steps)
 ──────────────────────────
-  1. PTP to pick XY at transit_z
-  2. Disable tray collisions → LIN down to contact
-  3. Gripper ON → PTP arc to above place → Re-enable tray collisions
-  4. PTP down to place contact (see move_to() call for why -- not LIN)
-  5. Gripper OFF → LIN retract
-  6. PTP to PARK (== observation pose, PARK_ORI orientation)
+  1.  PTP to pick XY at transit_z
+  2.  Disable tray collisions → LIN down to contact
+  3a. Gripper ON → LIN straight up to transit_z at pick XY
+  3b. PTP transit → above place (same safe height, no descent involved)
+  4.  PTP down to place contact (see move_to() call for why -- not LIN)
+  5.  Gripper OFF → LIN retract
+  6.  PTP to PARK (== observation pose, PARK_ORI orientation)
 
 Velocity
 ────────
@@ -114,8 +129,8 @@ def approach_z(z_contact: float) -> float:
 PARK_X, PARK_Y, PARK_Z = PARK_X_M, PARK_Y_M, PARK_Z_M
 
 # ── Velocity scaling ──────────────────────────────────────────────────────────
-VEL_TRANSIT = 0.05
-VEL_NEAR    = 0.03
+VEL_TRANSIT = 0.10
+VEL_NEAR    = 0.05
 
 
 def _ros_sleep(node, seconds):
@@ -210,12 +225,12 @@ class SurgicalControlServer(Node):
         transit_z = max(pick_app, place_app, Z_SAFE)
 
         # ── 1. Transit to above pick ──────────────────────────────────────────
-        self.get_logger().info('  [1/6] Transit → above pick (PTP)')
+        self.get_logger().info('  [1/7] Transit → above pick (PTP)')
         if not await self.move_to(px, py, transit_z, 'PTP', VEL_TRANSIT):
             return self._fail(response, 'Transit to pick column failed')
 
         # ── 2. LIN down to pick contact ───────────────────────────────────────
-        self.get_logger().info('  [2/6] Pick → contact (LIN)')
+        self.get_logger().info('  [2/7] Pick → contact (LIN)')
         await self.remove_object(obj)   # remove before descent so no self-collision
         if not await self.move_to(px, py, pz, 'LIN', VEL_NEAR):
             return self._fail(response, 'Pick contact failed')
@@ -224,13 +239,26 @@ class SurgicalControlServer(Node):
         await self.attach_object(obj)
         _ros_sleep(self, 0.5)
 
-        # ── 3. PTP arc to above place ─────────────────────────────────────────
-        self.get_logger().info('  [3/6] Retract + transit → above place (PTP)')
+        # ── 3a. LIN straight up to safe height at pick XY ─────────────────────
+        # PTP interpolates in joint space and gives no guarantee about the
+        # Cartesian path between the low pick pose and a distant, higher
+        # target -- that previously caused a low sweep toward +X that could
+        # clip the workspace/tray. LIN's z increases monotonically, so this
+        # leg can't dip below its start height.
+        self.get_logger().info('  [3a/7] Retract straight up (LIN)')
+        if not await self.move_to(px, py, transit_z, 'LIN', VEL_NEAR):
+            return self._fail(response, 'Pick retract failed')
+
+        # ── 3b. Transit → above place (PTP, at safe height only) ──────────────
+        # Now that the tool is already at transit_z, a PTP crossing between
+        # two points at the same height is safe -- there is nothing below it
+        # left to hit.
+        self.get_logger().info('  [3b/7] Transit → above place (PTP)')
         if not await self.move_to(dx, dy, transit_z, 'PTP', VEL_TRANSIT):
             return self._fail(response, 'Transit to place column failed')
 
         # ── 4. Down to place contact (PTP, not LIN -- see note below) ────────
-        self.get_logger().info('  [4/6] Place → contact (PTP)')
+        self.get_logger().info('  [4/7] Place → contact (PTP)')
         if not await self.move_to(dx, dy, dz, 'PTP', VEL_NEAR):
             return self._fail(response, 'Place contact failed')
 
@@ -239,12 +267,12 @@ class SurgicalControlServer(Node):
         _ros_sleep(self, 0.4)
 
         # ── 5. LIN retract ────────────────────────────────────────────────────
-        self.get_logger().info('  [5/6] Place → retract (LIN)')
+        self.get_logger().info('  [5/7] Place → retract (LIN)')
         if not await self.move_to(dx, dy, place_app, 'LIN', VEL_NEAR):
             return self._fail(response, 'Place retract failed')
 
         # ── 6. Park == observation pose (own orientation, NOT gripper ORI) ────
-        self.get_logger().info('  [6/6] Parking at observation pose (PTP)')
+        self.get_logger().info('  [6/7] Parking at observation pose (PTP)')
         await self.move_to(PARK_X, PARK_Y, PARK_Z, 'PTP', VEL_TRANSIT,
                             orientation=PARK_ORI)
 
@@ -357,7 +385,7 @@ class SurgicalControlServer(Node):
         req.group_name = 'manipulator'
         req.planner_id = planner
         req.pipeline_id = 'pilz_industrial_motion_planner'
-        req.num_planning_attempts = 5
+        req.num_planning_attempts = 3
         req.allowed_planning_time = 5.0
         req.max_velocity_scaling_factor = vel
         req.max_acceleration_scaling_factor = vel

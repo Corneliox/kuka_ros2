@@ -2,9 +2,12 @@
 """
 vision_node.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Trigger-based (NOT continuous-stream) object detection service.
+Trigger-based (NOT continuous-stream) object *detection* service, PLUS
+a continuous low-rate image *publisher* on /camera/image_raw so other
+nodes (e.g. episode_recorder.py) can consume the same physical camera
+without opening a second cv2.VideoCapture on the same device index.
 
-Why trigger-based, not livestreamed:
+Why detection stays trigger-based, not livestreamed:
   This pipeline is designed to run on a Minisforum (no GPU). Continuous
   per-frame processing is fine for cheap HSV color thresholding, but the
   moment this gets swapped for a real trained detector (see TODO below),
@@ -13,6 +16,19 @@ Why trigger-based, not livestreamed:
   cheap regardless of what runs inside detect_color(), so the swap to a
   real detector later doesn't require an architecture change -- only
   the internals of detect_color() change.
+
+Why the image publisher was added:
+  episode_recorder.py previously opened its own cv2.VideoCapture on the
+  same camera index this node uses. Many UVC webcam drivers refuse a
+  second simultaneous reader on one device, or silently starve one of
+  the two consumers. Instead, this node now owns the single
+  cv2.VideoCapture and publishes frames on /camera/image_raw at a fixed
+  low rate; episode_recorder.py (and anything else that wants frames)
+  subscribes to that topic instead of opening the device itself.
+
+  Both the periodic publisher and the on-demand detection service read
+  from the SAME cv2.VideoCapture object, so access is serialized with
+  self._cap_lock to avoid the two paths racing on the device.
 
 Exposes:
   /detect_object  (surgical_msgs/srv/DetectObject)
@@ -28,6 +44,14 @@ Exposes:
               that silently corrupted a calibration. Do not let internal
               mm-based math leak out of this boundary.
 
+Publishes:
+  /camera/image_raw  (sensor_msgs/Image, bgr8)
+    Continuous frames at `publish_rate_hz` (default 10 Hz), straight
+    from the same camera device this node already owns. Not undistorted
+    -- consumers that need undistorted frames should apply
+    CAMERA_MATRIX/DIST_COEFFS themselves, same as this node does
+    internally before detection.
+
 TODO (future upgrade path):
   Replace the body of detect_color() with a real object detector
   (.pt/.onnx model) call. Nothing else in this node, or in
@@ -37,11 +61,16 @@ TODO (future upgrade path):
   name, just adjust the request field's meaning accordingly.
 """
 
+import threading
+
 import rclpy
 from rclpy.node import Node
 
 import numpy as np
 import cv2
+
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 from surgical_msgs.srv import DetectObject
 
@@ -61,7 +90,7 @@ DIST_COEFFS = np.array([
 #   ros2 run kuka_ros2_demo vision_node --ros-args -p homography_path:=/some/other/path.npy
 DEFAULT_HOMOGRAPHY_PATH = "/home/emil/kuka_ros2/src/kuka_ros2_demo/data/aruco_homography.npy"
 
-CAMERA_DEVICE_INDEX = 0
+CAMERA_DEVICE_INDEX = 2
 
 # --- HSV color ranges -- same as vision.py, still needs tuning per lighting ---
 COLOR_RANGES = {
@@ -81,6 +110,8 @@ MAX_CONTOUR_AREA_PX = 20000
 # end up processing an image from a second or more ago (e.g. before the arm
 # finished retracting to the parked observation pose).
 BUFFER_FLUSH_FRAMES = 5
+
+DEFAULT_PUBLISH_RATE_HZ = 10.0
 
 
 class VisionNode(Node):
@@ -106,16 +137,66 @@ class VisionNode(Node):
             self.get_logger().error(f"Could not open camera device index {CAMERA_DEVICE_INDEX}")
             raise RuntimeError("Camera open failed")
 
+        # Serializes all access to self.cap between the detection service
+        # callback and the periodic image-publishing timer, since both read
+        # from the same underlying device.
+        self._cap_lock = threading.Lock()
+
         self.srv = self.create_service(DetectObject, 'detect_object', self._handle_request)
-        self.get_logger().info("vision_node ready -- serving /detect_object")
+
+        # --- Continuous image publisher (for episode_recorder.py and any ---
+        # --- other node that wants frames without opening its own capture) ---
+        self.declare_parameter('publish_rate_hz', DEFAULT_PUBLISH_RATE_HZ)
+        publish_rate = self.get_parameter('publish_rate_hz').value
+        self.declare_parameter('camera_frame_id', 'camera_optical_frame')
+        self._camera_frame_id = self.get_parameter('camera_frame_id').value
+
+        self.bridge = CvBridge()
+        self.image_pub = self.create_publisher(Image, '/camera/image_raw', 10)
+        self._publish_timer = self.create_timer(1.0 / publish_rate, self._publish_frame)
+
+        self.get_logger().info(
+            "vision_node ready -- serving /detect_object, "
+            f"publishing /camera/image_raw at {publish_rate:.1f} Hz"
+        )
 
     def _capture_fresh_frame(self):
-        for _ in range(BUFFER_FLUSH_FRAMES):
-            self.cap.grab()
-        ret, frame = self.cap.read()
+        """Grab-and-flush then read one fresh frame. Locked so this can't
+        interleave with the periodic publisher's own grab/read on the same
+        cv2.VideoCapture."""
+        with self._cap_lock:
+            for _ in range(BUFFER_FLUSH_FRAMES):
+                self.cap.grab()
+            ret, frame = self.cap.read()
         if not ret:
             return None
         return frame
+
+    def _publish_frame(self):
+        """Timer callback: grab one frame and publish it on /camera/image_raw.
+        Uses the same lock as _capture_fresh_frame() so this and an
+        in-flight /detect_object request never read the device at the same
+        time."""
+        with self._cap_lock:
+            for _ in range(BUFFER_FLUSH_FRAMES):
+                self.cap.grab()
+            ok, frame = self.cap.read()
+        if not ok:
+            self.get_logger().warn(
+                'Camera read failed during periodic publish -- skipping this frame.',
+                throttle_duration_sec=5.0,
+            )
+            return
+
+        try:
+            msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
+        except Exception as e:
+            self.get_logger().warn(f'cv_bridge conversion failed: {e}', throttle_duration_sec=5.0)
+            return
+
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self._camera_frame_id
+        self.image_pub.publish(msg)
 
     def _undistort(self, frame):
         h, w = frame.shape[:2]

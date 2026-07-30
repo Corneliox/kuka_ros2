@@ -66,9 +66,9 @@ def get_pick_z_for_object(object_name: str) -> float:
 # Single constant point -- every object goes to the same place, no per-color
 # spacing. If cubes need to be kept apart (stacking/collision risk), revisit
 # this later; for now it's one point as specified.
-HANDOFF_X_M = 0.3476
-HANDOFF_Y_M = -0.7690
-HANDOFF_Z_M = 0.1127
+HANDOFF_X_M = 0.14275
+HANDOFF_Y_M = -0.74651
+HANDOFF_Z_M = -0.01726
 
 # ── Safety / transit ──────────────────────────────────────────────────────
 APPROACH_CLEARANCE_M = 0.120
