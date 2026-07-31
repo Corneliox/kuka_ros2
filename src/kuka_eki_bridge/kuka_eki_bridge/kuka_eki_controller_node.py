@@ -16,6 +16,46 @@ simulation -- robot_state_publisher/RViz/TF downstream of this node reflect
 the actual cell.
 
 Replaces (deleted): bridge_node.py, gripper_bridge.py.
+
+CHANGES (2026-07-30):
+  goal_handle.succeed() used to fire purely off summed time.sleep(dt) from
+  the PLANNED trajectory timing -- nothing here ever checked the real KRC4
+  state before declaring a trajectory done. That let control_server fire
+  gripper/retract commands while the real arm was still mid-move.
+  Fix v1: block on real /joint_states-sourced arrival for the FINAL
+  waypoint only, via _wait_until_arrived(), instead of trusting planned dt.
+
+CHANGES (2026-07-30, later same day):
+  Fix v1 above exposed a SEPARATE, pre-existing structural issue rather
+  than causing a new one: MoveGroup's own trajectory_execution_manager
+  watchdog (execution_duration_monitoring) independently cancels a goal
+  if it runs past the PLANNED duration (scaled by a margin) -- it was
+  written assuming the controller reports completion promptly and
+  honestly. Real KRC4 execution is running well behind Pilz's planned
+  timing (see 2026-07-30 field data), so MoveGroup's watchdog now fires
+  and cancels the goal before our real-arrival wait can succeed, on
+  nearly every non-trivial trajectory.
+
+  _wait_until_arrived() was also blocking through that cancel signal --
+  it never checked self._preempted while polling, so a client-side cancel
+  was silently ignored for the full ARRIVAL_TIMEOUT_SEC, and this code
+  then called goal_handle.abort() on a goal the client had already given
+  up on. Fixed: the wait loop now checks self._preempted every iteration
+  and returns 'preempted' immediately, so the goal is properly resolved
+  with goal_handle.canceled() instead of a late, invalid abort().
+
+  This does NOT fix MoveGroup's watchdog itself -- that is a separate,
+  required change on the moveit_config / launch side (raise or disable
+  trajectory_execution.execution_duration_monitoring /
+  allowed_execution_duration_scaling / allowed_goal_duration_margin),
+  since MoveGroup's timing assumption is fundamentally miscalibrated
+  against this bridge's real (non-ros2_control) execution characteristics.
+  See eki_moveit_planning.launch.py for where to add the override.
+
+  Also holding off on checking EVERY kept waypoint against real state
+  (not just the final one) until the watchdog issue above is fixed --
+  extending real-waits to every waypoint would only make MoveGroup's
+  watchdog fire earlier and more often, not less.
 """
 
 import math
@@ -61,6 +101,23 @@ MIN_STEP_DEG = 2.0    # skip a waypoint unless it's moved at least this far
                        # is continuous-path blending (C_PTP/C_DIS) on the KRL
                        # side, if that program is ever open for editing.
 
+ARRIVAL_TOLERANCE_DEG = 0.5   # per-axis max error vs commanded target to call
+                               # the FINAL waypoint "arrived". Intermediate
+                               # waypoints are not checked this way -- only
+                               # the goal, since that's what downstream nodes
+                               # (vision, gripper) act on. Deliberately NOT
+                               # extended to every waypoint yet -- see module
+                               # docstring, that would worsen the MoveGroup
+                               # watchdog race until that's fixed separately.
+ARRIVAL_TIMEOUT_SEC = 120.0     # if the real robot hasn't converged within this
+                               # long after the last ptp() was sent, abort
+                               # rather than silently succeeding on a stale
+                               # timing assumption. In practice MoveGroup's
+                               # own watchdog (see module docstring) will
+                               # usually cancel before this fires unless that
+                               # watchdog is also relaxed on the launch side.
+ARRIVAL_POLL_SEC = 0.02
+
 
 def build_gripper_packet(state: int) -> bytes:
     """Type=0 -> no motion in the KRL switch, but $OUT[1] still gets set from Gripper."""
@@ -69,7 +126,7 @@ def build_gripper_packet(state: int) -> bytes:
         b'<Type>0</Type>'
         b'<Axis A1="0" A2="0" A3="0" A4="0" A5="0" A6="0"/>'
         b'<Cart X="0" Y="0" Z="0" A="0" B="0" C="0"/>'
-        b'<Velocity>0.05</Velocity>'
+        b'<Velocity>0.1</Velocity>'
         b'<Gripper>' + str(state).encode() + b'</Gripper>'
         b'</RobotCommand>'
     )
@@ -94,6 +151,15 @@ class KukaEkiControllerNode(Node):
         # poll on a ROS timer (a blocking recv() inside a timer callback is a
         # bad pattern regardless of executor threading). Runs as its own loop.
         self._joint_state_pub = self.create_publisher(JointState, JOINT_STATE_TOPIC, 10)
+
+        # Latest REAL joint angles in degrees, as reported by the KRC4 state
+        # socket -- NOT the planned/commanded angles. _execute_trajectory
+        # polls this to confirm physical arrival instead of trusting planned
+        # segment timing. Written only by _state_loop, read only through
+        # _get_latest_positions_deg().
+        self._latest_state_lock = threading.Lock()
+        self._latest_positions_deg = None
+
         self._state_thread = threading.Thread(target=self._state_loop, daemon=True)
         self._state_thread.start()
 
@@ -139,17 +205,49 @@ class KukaEkiControllerNode(Node):
             # patching their library.
             try:
                 axis = state.axis
-                positions_rad = [math.radians(float(getattr(axis, f'a{i}'))) for i in range(1, 7)]
+                angles_deg = [float(getattr(axis, f'a{i}')) for i in range(1, 7)]
             except (AttributeError, ValueError) as e:
                 self.get_logger().error(
                     f"RobotState field mismatch, update _state_loop: {e}", throttle_duration_sec=5.0)
                 continue
 
+            with self._latest_state_lock:
+                self._latest_positions_deg = angles_deg
+
+            positions_rad = [math.radians(a) for a in angles_deg]
             msg = JointState()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.name = JOINT_ORDER
             msg.position = positions_rad
             self._joint_state_pub.publish(msg)
+
+    def _get_latest_positions_deg(self):
+        with self._latest_state_lock:
+            return None if self._latest_positions_deg is None else list(self._latest_positions_deg)
+
+    def _wait_until_arrived(self, target_angles_deg,
+                             tolerance_deg=ARRIVAL_TOLERANCE_DEG,
+                             timeout_sec=ARRIVAL_TIMEOUT_SEC):
+        """Block until the REAL robot (via the EKI state socket, not planned
+        trajectory timing) is within tolerance_deg of target on every axis.
+        Returns 'arrived', 'preempted' (client canceled -- e.g. MoveGroup's
+        own trajectory_execution_manager watchdog gave up), or 'timeout'.
+
+        MUST check self._preempted on every iteration -- without this, a
+        cancel from the client (_handle_cancel sets _preempted) is silently
+        ignored for the full timeout_sec, and the caller would then call
+        goal_handle.abort() on a goal the client already gave up on."""
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            if self._preempted:
+                return 'preempted'
+            current = self._get_latest_positions_deg()
+            if current is not None:
+                max_err = max(abs(c - t) for c, t in zip(current, target_angles_deg))
+                if max_err <= tolerance_deg:
+                    return 'arrived'
+            time.sleep(ARRIVAL_POLL_SEC)
+        return 'timeout'
 
     # ── Gripper ──────────────────────────────────────────────────────────────
 
@@ -253,7 +351,7 @@ class KukaEkiControllerNode(Node):
             f"(MIN_STEP_DEG={MIN_STEP_DEG})")
 
         prev_t = 0.0
-        for i, point, angles_deg in kept:
+        for k, (i, point, angles_deg) in enumerate(kept):
             if self._preempted:
                 self.get_logger().info("Trajectory preempted.")
                 goal_handle.canceled()
@@ -267,16 +365,7 @@ class KukaEkiControllerNode(Node):
             # NOTE: always sent as a joint-space ptp(). FollowJointTrajectory
             # only carries joint positions per point -- whether Pilz planned
             # this segment as LIN or PTP is known at the MoveIt/Pilz planning
-            # layer, not recoverable here. If your pick-place coordinator
-            # relies on LIN's straight-line cartesian sweep for collision
-            # clearance (e.g. approach/retreat moves near the workspace),
-            # every waypoint still lands on the same joint targets Pilz
-            # computed, but the *path between* consecutive waypoints is
-            # whatever ptp() moves through, not the swept line LIN guarantees.
-            # Closing this gap requires either finer waypoint spacing from
-            # the planner (tighter interpolation) or exposing motion_client
-            # .lin()/.lin_rel() through a cartesian side-channel from the
-            # coordinator for moves that specifically need a swept line.
+            # layer, not recoverable here.
             try:
                 with self._eki_lock:
                     self.motion_client.ptp(target, max_velocity_scaling=0.1)
@@ -287,10 +376,39 @@ class KukaEkiControllerNode(Node):
                 result.error_code = FollowJointTrajectory.Result.PATH_TOLERANCE_VIOLATED
                 return result
 
-            t = point.time_from_start.sec + point.time_from_start.nanosec * 1e-9
-            dt = max(0.0, t - prev_t)
-            prev_t = t
-            time.sleep(dt)
+            is_last = (k == len(kept) - 1)
+            if is_last:
+                # Don't trust planned timing for the waypoint everything
+                # downstream (gripper, vision) depends on. Block on the REAL
+                # EKI state socket until the robot has actually converged,
+                # honoring cancellation the whole time (see _wait_until_arrived
+                # docstring for why that matters).
+                status = self._wait_until_arrived(angles_deg)
+                if status == 'preempted':
+                    self.get_logger().info(
+                        "Trajectory canceled by client while waiting for final "
+                        "arrival (likely MoveGroup's execution-duration watchdog "
+                        "-- see module docstring).")
+                    goal_handle.canceled()
+                    return FollowJointTrajectory.Result()
+                if status == 'timeout':
+                    current = self._get_latest_positions_deg()
+                    self.get_logger().error(
+                        f"Robot did not reach final waypoint within "
+                        f"{ARRIVAL_TIMEOUT_SEC}s (tolerance={ARRIVAL_TOLERANCE_DEG} deg). "
+                        f"target={['%.2f' % a for a in angles_deg]} "
+                        f"last_seen={['%.2f' % a for a in current] if current else 'unknown'}. "
+                        f"Aborting -- NOT safe for downstream (gripper/vision) to proceed.")
+                    goal_handle.abort()
+                    result = FollowJointTrajectory.Result()
+                    result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
+                    return result
+                # status == 'arrived' -> fall through to feedback + succeed()
+            else:
+                t = point.time_from_start.sec + point.time_from_start.nanosec * 1e-9
+                dt = max(0.0, t - prev_t)
+                prev_t = t
+                time.sleep(dt)
 
             fb = FollowJointTrajectory.Feedback()
             fb.desired = point

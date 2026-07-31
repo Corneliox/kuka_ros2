@@ -66,12 +66,16 @@ def launch_setup(context, *args, **kwargs):
     )
 
     move_group_server = Node(
-        package="moveit_ros_move_group",
-        executable="move_group",
-        output="screen",
-        parameters=[moveit_config.to_dict(), {"publish_planning_scene_hz": 30.0}],
+       package="moveit_ros_move_group",
+       executable="move_group",
+       output="screen",
+       parameters=[
+            moveit_config.to_dict(),
+            {"publish_planning_scene_hz": 30.0},
+            {"trajectory_execution.execution_duration_monitoring": False},
+        ],
     )
-
+    
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",

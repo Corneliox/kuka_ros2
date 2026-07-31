@@ -28,7 +28,7 @@ setup(
         'bridge_node = kuka_eki_bridge.bridge_node:main',
         'voice_bridge_node = kuka_eki_bridge.voice_bridge:main',
         'gripper_bridge = kuka_eki_bridge.gripper_bridge:main',
-        'controller_node = kuka_eki_bridge.kuka_eki_controller_node:main',
+        'kuka_eki_controller = kuka_eki_bridge.kuka_eki_controller_node:main',
         ],
     },
 )
