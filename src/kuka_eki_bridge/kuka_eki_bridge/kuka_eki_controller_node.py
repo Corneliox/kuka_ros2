@@ -52,10 +52,62 @@ CHANGES (2026-07-30, later same day):
   against this bridge's real (non-ros2_control) execution characteristics.
   See eki_moveit_planning.launch.py for where to add the override.
 
-  Also holding off on checking EVERY kept waypoint against real state
-  (not just the final one) until the watchdog issue above is fixed --
-  extending real-waits to every waypoint would only make MoveGroup's
-  watchdog fire earlier and more often, not less.
+  At this point still holding off on checking EVERY kept waypoint against
+  real state (not just the final one), reasoning that extending real-waits
+  to every waypoint would only make MoveGroup's watchdog fire earlier and
+  more often, not less.
+
+CHANGES (2026-07-31):
+  Replaced the flat ARRIVAL_TIMEOUT_SEC=120.0 with a kinematics-derived
+  per-move estimate (estimate_arrival_time_sec, trapezoidal/triangular
+  profile from the kr6_r900_2 joint limits, max across axes since KRL's
+  PTP synchronizes axes to arrive together).
+
+CHANGES (2026-07-31, later same day):
+  Field data with the adaptive timeout above surfaced the REAL bug: the
+  intermediate-waypoint loop was never checking real arrival at all --
+  it advanced through kept waypoints on planned dt (time.sleep(dt) from
+  the trajectory's time_from_start), exactly the same discredited
+  assumption already fixed for the final waypoint back on 2026-07-30.
+  Since execution_duration_monitoring is already disabled on the
+  moveit_config/launch side (see 2026-07-30 entry), the watchdog-race
+  concern that justified skipping intermediate real-waits no longer
+  applies, so it's now safe to remove.
+
+  Symptom before this fix: last_seen at the reported timeout was often
+  20+ degrees off target on every axis -- not a slow-final-hop problem,
+  but backlog: the loop kept firing new ptp() commands every planned dt
+  regardless of whether the real arm had reached the PREVIOUS command,
+  so by the last waypoint the arm was chasing a stale position several
+  waypoints behind.
+
+  Fix: every kept waypoint (not just the final one) now blocks on real
+  arrival via _wait_until_arrived(), with its own kinematics-derived
+  adaptive timeout. Intermediate waypoints use a looser
+  INTERMEDIATE_TOLERANCE_DEG (goal precision only matters for the final
+  waypoint, which downstream nodes act on) so this isn't as slow as the
+  tight final check would be if applied throughout.
+
+  This removes the old prev_t / planned-dt sleep from the intermediate
+  branch entirely -- there is no more "trust the planner's timing" path
+  left in this function.
+
+  Caveats carried forward (do not remove until resolved):
+    - ACCEL_SCALING_TODO: whether KSS scales acceleration by
+      max_velocity_scaling the same way it scales velocity is NOT
+      confirmed from documentation -- amax_scaled in
+      estimate_arrival_time_sec() assumes 1:1 scaling. Logged
+      (estimated, actual) pairs from the per-waypoint arrival-timing
+      log line are the way to check this, not guessing.
+    - ARRIVAL_TIME_MARGIN is an empirical fudge factor, not a physical
+      constant. Tune it from logged data once enough real runs exist.
+    - Still open, NOT yet investigated: whether EkiMotionClient.ptp()
+      blocks until the KRC4 acknowledges the command or is fire-and-
+      forget the instant the socket write returns. If fire-and-forget
+      and the KRC4 itself queues multiple pending PTPs, there could be
+      controller-side queue pileup independent of this node's own
+      per-waypoint waiting. Needs a standalone test (single ptp() call
+      + high-rate _state_loop logging) to confirm either way.
 """
 
 import math
@@ -101,22 +153,89 @@ MIN_STEP_DEG = 2.0    # skip a waypoint unless it's moved at least this far
                        # is continuous-path blending (C_PTP/C_DIS) on the KRL
                        # side, if that program is ever open for editing.
 
-ARRIVAL_TOLERANCE_DEG = 0.5   # per-axis max error vs commanded target to call
-                               # the FINAL waypoint "arrived". Intermediate
-                               # waypoints are not checked this way -- only
-                               # the goal, since that's what downstream nodes
-                               # (vision, gripper) act on. Deliberately NOT
-                               # extended to every waypoint yet -- see module
-                               # docstring, that would worsen the MoveGroup
-                               # watchdog race until that's fixed separately.
-ARRIVAL_TIMEOUT_SEC = 120.0     # if the real robot hasn't converged within this
-                               # long after the last ptp() was sent, abort
-                               # rather than silently succeeding on a stale
-                               # timing assumption. In practice MoveGroup's
-                               # own watchdog (see module docstring) will
-                               # usually cancel before this fires unless that
-                               # watchdog is also relaxed on the launch side.
+MAX_VELOCITY_SCALING = 0.2   # passed to every ptp() below -- also fed into
+                              # estimate_arrival_time_sec() so the adaptive
+                              # timeout matches the speed actually commanded.
+                              # Kept as one module constant since every
+                              # ptp() call in this file uses the same value;
+                              # if that ever changes, thread the value
+                              # through explicitly instead of relying on
+                              # this constant matching by convention.
+
+ARRIVAL_TOLERANCE_DEG = 0.5        # per-axis max error vs commanded target
+                                     # to call the FINAL waypoint "arrived".
+                                     # This is goal precision -- downstream
+                                     # nodes (vision, gripper) act on the
+                                     # final waypoint specifically.
+INTERMEDIATE_TOLERANCE_DEG = 3.0    # looser tolerance for non-final kept
+                                     # waypoints -- these only need to be
+                                     # "close enough to safely start the
+                                     # next segment," not goal precision.
+                                     # Tighten if intermediate waypoints
+                                     # ever matter downstream (they don't
+                                     # currently -- only vision/gripper
+                                     # timing off the FINAL waypoint does).
+
+ARRIVAL_TIME_MARGIN = 2.0      # multiplier applied to the kinematic estimate
+                                # to get the actual timeout. NOT a physical
+                                # constant -- see CHANGES (2026-07-31) above.
+                                # Tune from logged (estimated, actual) pairs
+                                # once enough real runs exist.
+ARRIVAL_TIME_FLOOR_SEC = 2.0   # minimum timeout regardless of estimate, so a
+                                # near-zero-distance waypoint doesn't get an
+                                # unreasonably tight timeout from rounding.
+ARRIVAL_TIME_CEILING_SEC = 120.0  # upper bound so a pathological estimate
+                                    # (e.g. bad joint-limit data, or no real
+                                    # state seen yet) can't wait forever.
+                                    # This was the old flat timeout; now a
+                                    # backstop rather than the default.
 ARRIVAL_POLL_SEC = 0.02
+
+# Per-axis (max_velocity rad/s, max_acceleration rad/s^2) at scaling=1.0,
+# from kuka_agilus_support/config/kr6_r900_2_joint_limits.yaml. If you
+# retarget this node to a different robot model, update this table --
+# nothing here reads the yaml file directly.
+JOINT_LIMITS_RAD = {
+    1: (6.283185307179586, 22.79306584548506),
+    2: (5.235987755982989, 6.620770071453642),
+    3: (6.283185307179586, 24.422794286227496),
+    4: (7.853981633974483, 122.63859993489172),
+    5: (7.853981633974483, 118.98874683077257),
+    6: (9.42477796076938, 237.15063943642176),
+}
+
+
+def estimate_arrival_time_sec(current_deg, target_deg, vel_scale):
+    """Per-axis trapezoidal (or triangular, for short moves) velocity-profile
+    time estimate, in seconds. Returns the MAX across the 6 axes, since KRL's
+    PTP synchronizes all axes to arrive together (it scales the faster axes
+    down to match whichever axis takes longest) -- the move as a whole can't
+    finish before its slowest axis would, moving alone at the same scaling.
+
+    ACCEL_SCALING_TODO: assumes max_acceleration scales by vel_scale the same
+    way max_velocity does. Not confirmed against KSS documentation -- see
+    module docstring. If logged actual arrivals run systematically later
+    than this estimate at low vel_scale, try removing the vel_scale factor
+    from amax_scaled first.
+    """
+    worst = 0.0
+    for i in range(6):
+        d = math.radians(abs(target_deg[i] - current_deg[i]))
+        if d < 1e-6:
+            continue
+        vmax_full, amax_full = JOINT_LIMITS_RAD[i + 1]
+        vmax = vmax_full * vel_scale
+        amax_scaled = amax_full * vel_scale  # ACCEL_SCALING_TODO -- see above
+        if vmax <= 0.0 or amax_scaled <= 0.0:
+            continue
+        t_accel = vmax / amax_scaled
+        d_accel = vmax ** 2 / (2 * amax_scaled)
+        if d >= 2 * d_accel:
+            t = 2 * t_accel + (d - 2 * d_accel) / vmax
+        else:
+            t = 2 * math.sqrt(d / amax_scaled)
+        worst = max(worst, t)
+    return worst
 
 
 def build_gripper_packet(state: int) -> bytes:
@@ -227,27 +346,34 @@ class KukaEkiControllerNode(Node):
 
     def _wait_until_arrived(self, target_angles_deg,
                              tolerance_deg=ARRIVAL_TOLERANCE_DEG,
-                             timeout_sec=ARRIVAL_TIMEOUT_SEC):
+                             timeout_sec=None):
         """Block until the REAL robot (via the EKI state socket, not planned
         trajectory timing) is within tolerance_deg of target on every axis.
-        Returns 'arrived', 'preempted' (client canceled -- e.g. MoveGroup's
-        own trajectory_execution_manager watchdog gave up), or 'timeout'.
+        Returns (status, elapsed_sec) where status is 'arrived', 'preempted'
+        (client canceled), or 'timeout'.
+
+        timeout_sec: caller-supplied adaptive timeout (see
+        estimate_arrival_time_sec / _execute_trajectory). Falls back to
+        ARRIVAL_TIME_CEILING_SEC if not given.
 
         MUST check self._preempted on every iteration -- without this, a
         cancel from the client (_handle_cancel sets _preempted) is silently
         ignored for the full timeout_sec, and the caller would then call
         goal_handle.abort() on a goal the client already gave up on."""
-        deadline = time.monotonic() + timeout_sec
+        if timeout_sec is None:
+            timeout_sec = ARRIVAL_TIME_CEILING_SEC
+        start = time.monotonic()
+        deadline = start + timeout_sec
         while time.monotonic() < deadline:
             if self._preempted:
-                return 'preempted'
+                return 'preempted', time.monotonic() - start
             current = self._get_latest_positions_deg()
             if current is not None:
                 max_err = max(abs(c - t) for c, t in zip(current, target_angles_deg))
                 if max_err <= tolerance_deg:
-                    return 'arrived'
+                    return 'arrived', time.monotonic() - start
             time.sleep(ARRIVAL_POLL_SEC)
-        return 'timeout'
+        return 'timeout', time.monotonic() - start
 
     # ── Gripper ──────────────────────────────────────────────────────────────
 
@@ -350,12 +476,21 @@ class KukaEkiControllerNode(Node):
             f"Executing {len(kept)}/{len(points)} waypoints after thinning "
             f"(MIN_STEP_DEG={MIN_STEP_DEG})")
 
-        prev_t = 0.0
+        # Real position at the start of each segment, used to estimate that
+        # segment's arrival time. Seeded from live state before the loop;
+        # updated from live state again each iteration where available, so
+        # this never silently reuses a stale commanded position.
+        prev_angles_deg = self._get_latest_positions_deg()
+
         for k, (i, point, angles_deg) in enumerate(kept):
             if self._preempted:
                 self.get_logger().info("Trajectory preempted.")
                 goal_handle.canceled()
                 return FollowJointTrajectory.Result()
+
+            current_before = self._get_latest_positions_deg()
+            if current_before is None:
+                current_before = prev_angles_deg  # best available fallback
 
             target = Axis(
                 a1=angles_deg[0], a2=angles_deg[1], a3=angles_deg[2],
@@ -368,7 +503,7 @@ class KukaEkiControllerNode(Node):
             # layer, not recoverable here.
             try:
                 with self._eki_lock:
-                    self.motion_client.ptp(target, max_velocity_scaling=0.1)
+                    self.motion_client.ptp(target, max_velocity_scaling=MAX_VELOCITY_SCALING)
             except Exception as e:
                 self.get_logger().error(f"Transmission failed at waypoint {i}: {e}")
                 goal_handle.abort()
@@ -377,38 +512,61 @@ class KukaEkiControllerNode(Node):
                 return result
 
             is_last = (k == len(kept) - 1)
-            if is_last:
-                # Don't trust planned timing for the waypoint everything
-                # downstream (gripper, vision) depends on. Block on the REAL
-                # EKI state socket until the robot has actually converged,
-                # honoring cancellation the whole time (see _wait_until_arrived
-                # docstring for why that matters).
-                status = self._wait_until_arrived(angles_deg)
-                if status == 'preempted':
-                    self.get_logger().info(
-                        "Trajectory canceled by client while waiting for final "
-                        "arrival (likely MoveGroup's execution-duration watchdog "
-                        "-- see module docstring).")
-                    goal_handle.canceled()
-                    return FollowJointTrajectory.Result()
-                if status == 'timeout':
-                    current = self._get_latest_positions_deg()
-                    self.get_logger().error(
-                        f"Robot did not reach final waypoint within "
-                        f"{ARRIVAL_TIMEOUT_SEC}s (tolerance={ARRIVAL_TOLERANCE_DEG} deg). "
-                        f"target={['%.2f' % a for a in angles_deg]} "
-                        f"last_seen={['%.2f' % a for a in current] if current else 'unknown'}. "
-                        f"Aborting -- NOT safe for downstream (gripper/vision) to proceed.")
-                    goal_handle.abort()
-                    result = FollowJointTrajectory.Result()
-                    result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
-                    return result
-                # status == 'arrived' -> fall through to feedback + succeed()
+            tolerance = ARRIVAL_TOLERANCE_DEG if is_last else INTERMEDIATE_TOLERANCE_DEG
+
+            # Every kept waypoint now blocks on REAL arrival -- not just the
+            # final one. See CHANGES (2026-07-31, later same day): advancing
+            # on planned dt let the real arm fall multiple waypoints behind
+            # the commanded stream, so by the final hop it was chasing a
+            # stale position instead of covering one segment's real distance.
+            if current_before is not None:
+                est = estimate_arrival_time_sec(current_before, angles_deg, MAX_VELOCITY_SCALING)
+                adaptive_timeout = min(
+                    ARRIVAL_TIME_CEILING_SEC,
+                    max(ARRIVAL_TIME_FLOOR_SEC, est * ARRIVAL_TIME_MARGIN),
+                )
             else:
-                t = point.time_from_start.sec + point.time_from_start.nanosec * 1e-9
-                dt = max(0.0, t - prev_t)
-                prev_t = t
-                time.sleep(dt)
+                # No real state seen yet at all (shouldn't normally happen
+                # this late) -- fall back to the ceiling rather than guess.
+                est = None
+                adaptive_timeout = ARRIVAL_TIME_CEILING_SEC
+
+            status, waited = self._wait_until_arrived(
+                angles_deg, tolerance_deg=tolerance, timeout_sec=adaptive_timeout)
+
+            # Logged regardless of outcome -- this is the data needed to
+            # tune ARRIVAL_TIME_MARGIN and check the ACCEL_SCALING_TODO
+            # assumption in estimate_arrival_time_sec(), instead of guessing.
+            self.get_logger().info(
+                f"Waypoint {i} ({'final' if is_last else 'intermediate'}, "
+                f"tolerance={tolerance} deg): "
+                f"estimated={('%.2f' % est) if est is not None else 'n/a'}s "
+                f"margin={ARRIVAL_TIME_MARGIN} timeout={adaptive_timeout:.2f}s "
+                f"actual={waited:.2f}s status={status}")
+
+            if status == 'preempted':
+                self.get_logger().info(
+                    "Trajectory canceled by client while waiting for arrival "
+                    "(likely MoveGroup's execution-duration watchdog, or an "
+                    "explicit cancel -- see module docstring).")
+                goal_handle.canceled()
+                return FollowJointTrajectory.Result()
+            if status == 'timeout':
+                current = self._get_latest_positions_deg()
+                self.get_logger().error(
+                    f"Robot did not reach waypoint {i} "
+                    f"({'final' if is_last else 'intermediate'}) within "
+                    f"{adaptive_timeout:.2f}s (tolerance={tolerance} deg). "
+                    f"target={['%.2f' % a for a in angles_deg]} "
+                    f"last_seen={['%.2f' % a for a in current] if current else 'unknown'}. "
+                    f"Aborting -- NOT safe for downstream (gripper/vision) to proceed.")
+                goal_handle.abort()
+                result = FollowJointTrajectory.Result()
+                result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
+                return result
+            # status == 'arrived' -> fall through to feedback and next segment
+
+            prev_angles_deg = angles_deg
 
             fb = FollowJointTrajectory.Feedback()
             fb.desired = point
