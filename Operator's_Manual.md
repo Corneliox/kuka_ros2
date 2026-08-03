@@ -1,15 +1,37 @@
 # KUKA ROS 2 Pick-and-Place — Operations Manual
 
-This manual covers running the pick-and-place system in simulation, bridging to the real
-robot, calibrating the workspace camera, and where to make changes when updating the
-system's logic.
+This repository provides a complete ROS 2 pick-and-place pipeline for the KUKA KR6 R900-2 using Ethernet KRL Interface (EKI). Motion planning is performed with MoveIt, while trajectory execution is handled directly through a dedicated FollowJointTrajectory controller that communicates with the KRC4 controller over EKI.
+
+## 1. Establishing the Bridge
+
+To connect your system to the real robot, do as follows.
+
+**On the KUKA SmartPAD:**
+1. Flip the key to the right and switch from **T1** to **AUT**.
+   ![Key switch on the SmartPAD, turned to change operating mode](images/smartpad_key_switch_1.png)
+   ![Operation Mode screen showing T1 / AUT selection](images/smartpad_key_switch_2.png)
+   ![AUT selected, ROS_EKI shown as the controller](images/smartpad_select_aut.png)
+2. Select **ros_eki**.
+   ![Navigator showing ros_eki selected under Program](images/smartpad_select_ros_eki.png)
+3. Press the green and white buttons (start key) behind the SmartPAD to start the program.
+   ![Green and white start-key buttons on the back of the SmartPAD](images/smartpad_start_key_buttons.png)
+4. Press the green play button on the side to run the program.
+   - To pause the robot at any time, press the red pause button.
+
+**On your system**, after the SmartPAD steps above are complete:
+```bash
+ros2 run kuka_eki_bridge kuka_eki_controller
+```
+![Gripper bridge terminal — connecting to KUKA controller](images/controller_terminal.png)
+
+This connects the system to the robot via **port 54600** through KUKA IP address
+**`192.168.1.147`**.
 
 ---
 
-## 1. Simulation / Base Setup (5 Terminals)
+## 2. Software Stack
 
-This sequence is required for both simulation testing and as the foundation for real
-hardware control. Run each command in its own terminal, in order.
+Once communication with the KUKA KRC4 controller has been successfully established, launch the remaining ROS 2 software stack. Run each command in its own terminal, in the order shown below.
 
 > **Rebuild first if anything changed:** if you've edited any core script, `setup.py`,
 > or added a new node since the last run, rebuild the workspace before launching
@@ -19,11 +41,9 @@ hardware control. Run each command in its own terminal, in order.
 > colcon build --continue-with-error
 > ```
 
-**Terminal 1 — MoveIt planning (fake hardware):**
+**Terminal 1 — MoveIt planning and EKI controller:**
 ```bash
-ros2 launch kuka_kr_moveit_config moveit_planning_fake_hardware.launch.py \
-  robot_model:=kr6_r900_2 \
-  robot_family:=agilus
+ros2 launch kuka_eki_bridge eki_moveit_planning.launch.py
 ```
 ![Launch command terminal](images/launch_command_terminal.png)
 ![RViz with MoveIt planning loaded](images/rviz_moveit_planning.png)
@@ -54,42 +74,6 @@ ros2 run kuka_ros2_demo pick_place_coordinator
 ![Pick-place coordinator terminal](images/pick_place_coordinator_terminal.png)
 
 This is enough to run and test the full pipeline in simulation.
-
----
-
-## 2. Moving the Real Robot
-
-The gripper on the real robot is controlled by a separate bridge, which acts on the
-`/gripper_cmd` flag published by the control server:
-
-```bash
-ros2 run kuka_eki_bridge gripper_bridge
-```
-
-### Establishing the Bridge
-
-After Terminals 1–5 above are all running, connect to the real robot as follows.
-
-**On the KUKA SmartPAD:**
-1. Flip the key to the right and switch from **T1** to **AUT**.
-   ![Key switch on the SmartPAD, turned to change operating mode](images/smartpad_key_switch_1.png)
-   ![Operation Mode screen showing T1 / AUT selection](images/smartpad_key_switch_2.png)
-   ![AUT selected, ROS_EKI shown as the controller](images/smartpad_select_aut.png)
-2. Select **ros_eki**.
-   ![Navigator showing ros_eki selected under Program](images/smartpad_select_ros_eki.png)
-3. Press the green and white buttons (start key) behind the SmartPAD to start the program.
-   ![Green and white start-key buttons on the back of the SmartPAD](images/smartpad_start_key_buttons.png)
-4. Press the green play button on the side to run the program.
-   - To pause the robot at any time, press the red pause button.
-
-**On your system**, after the SmartPAD steps above are complete:
-```bash
-ros2 run kuka_eki_bridge gripper_bridge
-```
-![Gripper bridge terminal — connecting to KUKA controller](images/gripper_bridge_terminal.png)
-
-This connects the system to the robot via **port 54600** through KUKA IP address
-**`192.168.1.147`**.
 
 ---
 
