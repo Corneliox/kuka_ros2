@@ -153,7 +153,7 @@ MIN_STEP_DEG = 2.0    # skip a waypoint unless it's moved at least this far
                        # is continuous-path blending (C_PTP/C_DIS) on the KRL
                        # side, if that program is ever open for editing.
 
-MAX_VELOCITY_SCALING = 0.2   # passed to every ptp() below -- also fed into
+MAX_VELOCITY_SCALING = 0.5   # passed to every ptp() below -- also fed into
                               # estimate_arrival_time_sec() so the adaptive
                               # timeout matches the speed actually commanded.
                               # Kept as one module constant since every
@@ -245,7 +245,7 @@ def build_gripper_packet(state: int) -> bytes:
         b'<Type>0</Type>'
         b'<Axis A1="0" A2="0" A3="0" A4="0" A5="0" A6="0"/>'
         b'<Cart X="0" Y="0" Z="0" A="0" B="0" C="0"/>'
-        b'<Velocity>0.1</Velocity>'
+        b'<Velocity>0.2</Velocity>'
         b'<Gripper>' + str(state).encode() + b'</Gripper>'
         b'</RobotCommand>'
     )

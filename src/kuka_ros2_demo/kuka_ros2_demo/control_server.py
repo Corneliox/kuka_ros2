@@ -129,8 +129,8 @@ def approach_z(z_contact: float) -> float:
 PARK_X, PARK_Y, PARK_Z = PARK_X_M, PARK_Y_M, PARK_Z_M
 
 # ── Velocity scaling ──────────────────────────────────────────────────────────
-VEL_TRANSIT = 0.10
-VEL_NEAR    = 0.05
+VEL_TRANSIT = 0.5
+VEL_NEAR    = 0.2
 
 
 def _ros_sleep(node, seconds):
