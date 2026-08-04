@@ -49,7 +49,7 @@ setup(
             'axis_node = kuka_ros2_demo.axis_sweep:main',
             'grid_node = kuka_ros2_demo.grid_coordinator:main',
             'detect_node = kuka_ros2_demo.vision_detect_node:main',
-            'vision_recorder = kuka_ros2_demo.vision_recorder:main',
+            'recorder = kuka_ros2_demo.recorder:main',
         ],
     },
 )

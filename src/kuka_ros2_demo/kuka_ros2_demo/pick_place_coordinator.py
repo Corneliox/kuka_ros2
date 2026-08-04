@@ -61,6 +61,7 @@ just doing it via Cartesian target + IK instead of a fixed joint solution.
 
 import math
 import threading
+from collections import deque
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -108,6 +109,13 @@ class PickPlaceCoordinator(Node):
 
         self._busy = False
         self._busy_lock = threading.Lock()
+
+        # FIFO of (target, mode) pairs received while busy. A voice command
+        # arriving mid-task used to be dropped outright (just a warn log) --
+        # now it's queued and dispatched, in arrival order, once the current
+        # target's full pick loop releases. See _voice_callback / _release /
+        # _dispatch_next.
+        self._pending = deque()
 
         # Recovery state, keyed by target (color OR screw class) -- reset on
         # success, checked on failure
@@ -164,11 +172,20 @@ class PickPlaceCoordinator(Node):
 
         with self._busy_lock:
             if self._busy:
-                self.get_logger().warn(f'Arm is busy. Ignoring command "{target}".')
+                self._pending.append((target, mode))
+                self.get_logger().info(
+                    f'Arm busy -- queued "{target}" '
+                    f'({len(self._pending)} pending).')
                 return
             self._busy = True
 
-        # Fresh recovery state for this target at the start of a new command
+        self._start_target(target, mode)
+
+    def _start_target(self, target: str, mode: str) -> None:
+        """Actually begin the park->detect->pick loop for one target. Caller
+        must already hold _busy=True before calling this -- used both for a
+        fresh voice command and for the next item popped off _pending."""
+        # Fresh recovery state for this target at the start of its run
         self._failed_positions[target] = []
         self._consecutive_failures[target] = 0
 
@@ -389,8 +406,18 @@ class PickPlaceCoordinator(Node):
         self._move_to_park(target, mode)
 
     def _release(self, target: str) -> None:
+        next_up = None
         with self._busy_lock:
             self._busy = False
+            if self._pending:
+                next_up = self._pending.popleft()
+                self._busy = True
+        if next_up is not None:
+            next_target, next_mode = next_up
+            self.get_logger().info(
+                f'"{target}" sequence done -- starting queued "{next_target}" '
+                f'({len(self._pending)} still pending).')
+            self._start_target(next_target, next_mode)
 
 
 def main(args=None):

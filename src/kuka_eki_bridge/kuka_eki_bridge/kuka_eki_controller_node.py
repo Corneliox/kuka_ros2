@@ -108,6 +108,30 @@ CHANGES (2026-07-31, later same day):
       controller-side queue pileup independent of this node's own
       per-waypoint waiting. Needs a standalone test (single ptp() call
       + high-rate _state_loop logging) to confirm either way.
+
+CHANGES (2026-08-03):
+  Added a COMMANDED joint-target publisher (/commanded_joint_states) for
+  dataset recording (episode_recorder.py). Every time this node actually
+  sends a ptp() to the KRC4 for a kept waypoint, it now also publishes
+  that same target as a JointState on /commanded_joint_states, so a
+  recorder can log (real_state, commanded_target) pairs at each tick
+  instead of having to infer "the action" purely by differencing
+  consecutive observed states offline.
+
+  IMPORTANT CAVEAT for anyone consuming this topic: this is NOT a
+  continuous per-cycle command stream (there is no RSI channel on this
+  cell -- see module docstring). It is a STEP signal that only changes
+  when _execute_trajectory dispatches a new kept waypoint (every
+  ~0.1-0.6s in practice, not fixed-rate). A recorder sampling this at a
+  fixed rate will see the same commanded target repeated across several
+  consecutive samples while the real arm is still catching up to it via
+  _wait_until_arrived(). That's correct, not a bug -- do not mistake
+  repeated values here for a stalled recorder; cross-check against
+  /joint_states (which changes continuously) if in doubt.
+
+  Published AFTER a successful ptp() send (not before), so a transmission
+  failure never results in a phantom "commanded" value for a target that
+  was never actually sent to the KRC4.
 """
 
 import math
@@ -134,6 +158,7 @@ KUKA_IP = "192.168.1.147"
 
 GRIPPER_CMD_TOPIC = '/gripper_cmd'          # Int8: 1 = ON, 0 = OFF
 JOINT_STATE_TOPIC = '/joint_states'
+COMMANDED_JOINT_TOPIC = '/commanded_joint_states'  # see CHANGES (2026-08-03)
 ACTION_NAME = 'eki_arm_controller/follow_joint_trajectory'  # moveit_simple_controller_manager
                                                              # builds the full action name as
                                                              # <controller_name>/<action_ns> --
@@ -271,6 +296,12 @@ class KukaEkiControllerNode(Node):
         # bad pattern regardless of executor threading). Runs as its own loop.
         self._joint_state_pub = self.create_publisher(JointState, JOINT_STATE_TOPIC, 10)
 
+        # ---- Commanded joint-target feedback (dataset recording) ----
+        # See CHANGES (2026-08-03) above -- STEP signal, not a continuous
+        # per-cycle command stream. Published once per dispatched kept
+        # waypoint, after a successful ptp() send.
+        self._commanded_pub = self.create_publisher(JointState, COMMANDED_JOINT_TOPIC, 10)
+
         # Latest REAL joint angles in degrees, as reported by the KRC4 state
         # socket -- NOT the planned/commanded angles. _execute_trajectory
         # polls this to confirm physical arrival instead of trusting planned
@@ -343,6 +374,16 @@ class KukaEkiControllerNode(Node):
     def _get_latest_positions_deg(self):
         with self._latest_state_lock:
             return None if self._latest_positions_deg is None else list(self._latest_positions_deg)
+
+    def _publish_commanded_target(self, angles_deg):
+        """Publish the joint-space target just dispatched to the KRC4 as a
+        JointState on /commanded_joint_states. See CHANGES (2026-08-03) --
+        call this only AFTER a successful ptp() send, never speculatively."""
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = JOINT_ORDER
+        msg.position = [math.radians(a) for a in angles_deg]
+        self._commanded_pub.publish(msg)
 
     def _wait_until_arrived(self, target_angles_deg,
                              tolerance_deg=ARRIVAL_TOLERANCE_DEG,
@@ -510,6 +551,11 @@ class KukaEkiControllerNode(Node):
                 result = FollowJointTrajectory.Result()
                 result.error_code = FollowJointTrajectory.Result.PATH_TOLERANCE_VIOLATED
                 return result
+
+            # Only publish the commanded target once the send above actually
+            # succeeded -- see CHANGES (2026-08-03). This is what
+            # episode_recorder.py logs alongside real /joint_states.
+            self._publish_commanded_target(angles_deg)
 
             is_last = (k == len(kept) - 1)
             tolerance = ARRIVAL_TOLERANCE_DEG if is_last else INTERMEDIATE_TOLERANCE_DEG
