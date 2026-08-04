@@ -139,10 +139,10 @@ def _ros_sleep(node, seconds):
         time.sleep(0.01)
 
 
-class SurgicalControlServer(Node):
+class ControlServer(Node):
 
     def __init__(self):
-        super().__init__('surgical_control_server')
+        super().__init__('control_server')
         self.cb = ReentrantCallbackGroup()
 
         self._move_client = ActionClient(
@@ -162,7 +162,7 @@ class SurgicalControlServer(Node):
         self._move_client.wait_for_server()
         self.get_logger().info('Waiting for ApplyPlanningScene service...')
         self._scene_client.wait_for_service()
-        self.get_logger().info('Surgical Control Server online.')
+        self.get_logger().info('Control Server online.')
 
     # ── Gripper ───────────────────────────────────────────────────────────────
 
@@ -359,8 +359,8 @@ class SurgicalControlServer(Node):
         await self._scene_client.call_async(req)
         self.get_logger().info(f'  Scene: "{object_id}" detached')
 
-    def setup_surgical_scene(self):
-        self.get_logger().info('=== Building surgical scene ===')
+    def setup_scene(self):
+        self.get_logger().info('=== Building scene ===')
         # No static collision objects added -- see module docstring.
         self.get_logger().info('=== Scene ready ===')
 
@@ -445,8 +445,8 @@ class SurgicalControlServer(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = SurgicalControlServer()
-    node.setup_surgical_scene()
+    node = ControlServer()
+    node.setup_scene()
     time.sleep(1.0)
     executor = MultiThreadedExecutor()
     executor.add_node(node)

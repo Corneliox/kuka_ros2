@@ -74,6 +74,10 @@ from cv_bridge import CvBridge
 
 from surgical_msgs.srv import DetectObject
 
+from kuka_ros2_demo.pick_place_constants import (
+    WS_X_MIN, WS_X_MAX, WS_Y_MIN, WS_Y_MAX,
+)
+
 
 # --- Camera intrinsics (wrist camera, default_cam.yaml) ---
 CAMERA_MATRIX = np.array([
@@ -90,7 +94,7 @@ DIST_COEFFS = np.array([
 #   ros2 run kuka_ros2_demo vision_node --ros-args -p homography_path:=/some/other/path.npy
 DEFAULT_HOMOGRAPHY_PATH = "/home/emil/kuka_ros2/src/kuka_ros2_demo/data/aruco_homography.npy"
 
-CAMERA_DEVICE_INDEX = 2
+CAMERA_DEVICE_INDEX = 3
 
 # --- HSV color ranges -- same as vision.py, still needs tuning per lighting ---
 COLOR_RANGES = {
@@ -102,10 +106,25 @@ COLOR_RANGES = {
     "green":  [(np.array([40, 80, 60]),  np.array([85, 255, 255]))],
     "blue":   [(np.array([95, 100, 60]), np.array([130, 255, 255]))],
 }
-MIN_CONTOUR_AREA_PX = 200
+MIN_CONTOUR_AREA_PX = 120   # Lowered from 200 -- a fully unoccluded 2x2cm cube
+                            # at the observe-pose camera height/focal length
+                            # works out to roughly 256px^2 (865px focal *
+                            # 0.02m / 1.09m height, squared). A cube wedged
+                            # against neighbours (touching cubes occlude each
+                            # other in a top-down HSV+contour pipeline) can
+                            # show far less than its full face -- 200px left
+                            # almost no margin for that. Matches a value
+                            # already validated once before via debug dumps;
+                            # if false positives from noise start showing up
+                            # at 120, check DEBUG_MASK_DIR dumps (below)
+                            # before raising this back up blindly.
 MAX_CONTOUR_AREA_PX = 20000
 
-# Number of throwaway grab() calls before reading a real frame -- USB webcams
+# Debug mask dumps -- same convention as updated_aruco.py's aruco_debug.png:
+# written next to the homography file whenever a detection call comes back
+# empty (or all-rejected), so you can open the actual thresholded mask and
+# see real blob pixel counts instead of guessing at MIN_CONTOUR_AREA_PX.
+DEBUG_MASK_ON_FAILURE = True
 # commonly buffer several stale frames internally, so without this you can
 # end up processing an image from a second or more ago (e.g. before the arm
 # finished retracting to the parked observation pose).
@@ -131,6 +150,14 @@ class VisionNode(Node):
                 f"--ros-args -p homography_path:=/your/path.npy"
             )
             raise
+
+        # Debug mask dumps go next to the homography file -- same directory
+        # updated_aruco.py already writes aruco_debug.png/preprocessed_debug.png
+        # to, keeping all vision debug output in one place.
+        import os
+        self._debug_dir = os.path.dirname(os.path.abspath(homography_path))
+        self._last_mask = None
+        self._last_contour_areas = []
 
         self.cap = cv2.VideoCapture(CAMERA_DEVICE_INDEX)
         if not self.cap.isOpened():
@@ -210,6 +237,8 @@ class VisionNode(Node):
         {"px":..., "py":..., "area":...} detections.
         """
         if color_name not in COLOR_RANGES:
+            self._last_mask = None
+            self._last_contour_areas = []
             return []
 
         ranges = COLOR_RANGES[color_name]
@@ -217,7 +246,9 @@ class VisionNode(Node):
         for lower, upper in ranges:
             mask |= cv2.inRange(hsv, lower, upper)
 
-        kernel = np.ones((5, 5), np.uint8)
+        kernel = np.ones((3, 3), np.uint8)   # was 5x5 -- large enough to erase
+                                              # a thin occluded sliver entirely
+                                              # before area filtering ever sees it
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
@@ -232,7 +263,43 @@ class VisionNode(Node):
                 continue
             cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
             detections.append({"px": cx, "py": cy, "area": area})
+
+        # Stashed (not part of the return contract -- detect_color() still
+        # returns only the detections list, so a future real-detector swap-in
+        # doesn't need to change) purely so _handle_request can dump it for
+        # debugging on a failed/rejected call, per DEBUG_MASK_ON_FAILURE.
+        self._last_mask = mask
+        self._last_contour_areas = [cv2.contourArea(c) for c in contours]
         return detections
+
+    def _dump_debug_mask(self, color_name, frame_bgr=None):
+        if not DEBUG_MASK_ON_FAILURE or self._last_mask is None:
+            return
+        try:
+            mask_path = f"{self._debug_dir}/vision_debug_mask_{color_name}.png"
+            cv2.imwrite(mask_path, self._last_mask)
+            areas = sorted(self._last_contour_areas, reverse=True)
+            msg = (
+                f"  Debug mask written to {mask_path} -- contour areas found: "
+                f"{[round(a) for a in areas[:5]]}"
+                f"{' (+more)' if len(areas) > 5 else ''} "
+                f"(MIN_CONTOUR_AREA_PX={MIN_CONTOUR_AREA_PX})"
+            )
+            if frame_bgr is not None:
+                # Save the LITERAL undistorted frame this call processed --
+                # not a mask derived from it -- so `python3 vision.py
+                # <this file>` reproduces exactly what the live node saw.
+                # Comparing against a frame captured at a different moment
+                # (different lighting/pose/cube arrangement) isn't a valid
+                # apples-to-apples test of whether the code or the capture
+                # is at fault.
+                frame_path = f"{self._debug_dir}/vision_debug_frame_{color_name}.png"
+                cv2.imwrite(frame_path, frame_bgr)
+                msg += f"\n  Exact input frame written to {frame_path} -- run " \
+                       f"`python3 vision.py {frame_path}` to compare directly."
+            self.get_logger().info(msg)
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write debug mask/frame: {e}")
 
     def _pixel_to_world_mm(self, px, py):
         p = np.array([px, py, 1.0])
@@ -256,16 +323,56 @@ class VisionNode(Node):
         detections = self.detect_color(hsv, color_name)
         if not detections:
             self.get_logger().warn(f"No '{color_name}' object detected")
+            self._dump_debug_mask(color_name, undistorted)
             response.found = False
             return response
 
-        best = max(detections, key=lambda d: d["area"])
-        x_mm, y_mm = self._pixel_to_world_mm(best["px"], best["py"])
+        # Resolve every candidate to world coords BEFORE picking "best by
+        # area", and drop anything outside the real pick workspace. Without
+        # this, a large false-positive blob near the robot's own base (e.g.
+        # KUKA orange occasionally reading as "red" under some lighting) can
+        # simply outmass the real object and win every single call, since it
+        # sits at a fixed, always-large apparent size right under the wrist
+        # camera. Using WS_X_MIN/MAX/WS_Y_MIN/MAX here is the same source of
+        # truth control_server already rejects out-of-bounds picks against --
+        # this just moves the rejection upstream, before a task is even
+        # dispatched, instead of after a wasted park->detect->dispatch->fail
+        # cycle.
+        in_bounds = []
+        rejected = 0
+        for d in detections:
+            x_mm, y_mm = self._pixel_to_world_mm(d["px"], d["py"])
+            x_m, y_m = x_mm / 1000.0, y_mm / 1000.0
+            if WS_X_MIN <= x_m <= WS_X_MAX and WS_Y_MIN <= y_m <= WS_Y_MAX:
+                in_bounds.append({**d, "x_m": x_m, "y_m": y_m})
+            else:
+                rejected += 1
+
+        if not in_bounds:
+            if rejected:
+                rejected_coords = [
+                    (round(self._pixel_to_world_mm(d["px"], d["py"])[0] / 1000.0, 4),
+                     round(self._pixel_to_world_mm(d["px"], d["py"])[1] / 1000.0, 4),
+                     round(d["area"]))
+                    for d in detections
+                ]
+                self.get_logger().warn(
+                    f"'{color_name}': {rejected} detection(s) found but all fell "
+                    f"outside the workspace bounds (likely a false positive near "
+                    f"the robot base) -- treating as not found. "
+                    f"Rejected candidates (x_m, y_m, area_px): {rejected_coords}")
+            else:
+                self.get_logger().warn(f"No '{color_name}' object detected")
+            self._dump_debug_mask(color_name, undistorted)
+            response.found = False
+            return response
+
+        best = max(in_bounds, key=lambda d: d["area"])
 
         # Convert at the boundary only -- everything ROS-facing is metres.
         response.found = True
-        response.x = x_mm / 1000.0
-        response.y = y_mm / 1000.0
+        response.x = best["x_m"]
+        response.y = best["y_m"]
 
         self.get_logger().info(
             f"Found '{color_name}' -> pixel=({best['px']:.1f},{best['py']:.1f})  "
