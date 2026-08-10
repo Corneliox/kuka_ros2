@@ -50,6 +50,7 @@ setup(
             'grid_node = kuka_ros2_demo.grid_coordinator:main',
             'detect_node = kuka_ros2_demo.vision_detect_node:main',
             'recorder = kuka_ros2_demo.recorder:main',
+            'benchmark_logger = kuka_ros2_demo.benchmark_logger:main',
         ],
     },
 )

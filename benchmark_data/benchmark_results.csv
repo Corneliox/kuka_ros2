@@ -1,0 +1,51 @@
+test,run,timestamp,params,task_success,first_attempt_success,pick_success,place_success,completion_time_s,decision_latency_s,position_error_mm,tracking_error_mean_deg,tracking_error_max_deg,gripper_on_count,collision_count,drop,retries,moveit_error_codes,notes
+baseline,1,,,,,,,,,,,,,,,,,
+baseline,2,,,,,,,,,,,,,,,,,
+baseline,3,,,,,,,,,,,,,,,,,
+baseline,4,,,,,,,,,,,,,,,,,
+baseline,5,,,,,,,,,,,,,,,,,
+baseline,6,,,,,,,,,,,,,,,,,
+baseline,7,,,,,,,,,,,,,,,,,
+baseline,8,,,,,,,,,,,,,,,,,
+baseline,9,,,,,,,,,,,,,,,,,
+baseline,10,,,,,,,,,,,,,,,,,
+baseline,11,,,,,,,,,,,,,,,,,
+baseline,12,,,,,,,,,,,,,,,,,
+baseline,13,,,,,,,,,,,,,,,,,
+baseline,14,,,,,,,,,,,,,,,,,
+baseline,15,,,,,,,,,,,,,,,,,
+baseline,16,,,,,,,,,,,,,,,,,
+baseline,17,,,,,,,,,,,,,,,,,
+baseline,18,,,,,,,,,,,,,,,,,
+baseline,19,,,,,,,,,,,,,,,,,
+baseline,20,,,,,,,,,,,,,,,,,
+generalization,1,,,,,,,,,,,,,,,,,
+generalization,2,,,,,,,,,,,,,,,,,
+generalization,3,,,,,,,,,,,,,,,,,
+generalization,4,,,,,,,,,,,,,,,,,
+generalization,5,,,,,,,,,,,,,,,,,
+generalization,6,,,,,,,,,,,,,,,,,
+generalization,7,,,,,,,,,,,,,,,,,
+generalization,8,,,,,,,,,,,,,,,,,
+generalization,9,,,,,,,,,,,,,,,,,
+generalization,10,,,,,,,,,,,,,,,,,
+vision_robustness,1,,,,,,,,,,,,,,,,,lighting=bright
+vision_robustness,2,,,,,,,,,,,,,,,,,lighting=normal_lab
+vision_robustness,3,,,,,,,,,,,,,,,,,lighting=dim
+vision_robustness,4,,,,,,,,,,,,,,,,,lighting=shadow_across_workspace
+vision_robustness,5,,,,,,,,,,,,,,,,,occlusion=20pct
+vision_robustness,6,,,,,,,,,,,,,,,,,occlusion=40pct
+vision_robustness,7,,,,,,,,,,,,,,,,,occlusion=60pct
+vision_robustness,8,,,,,,,,,,,,,,,,,clutter=extra_cubes
+vision_robustness,9,,,,,,,,,,,,,,,,,clutter=tools_and_cables
+vision_robustness,10,,,,,,,,,,,,,,,,,clutter=misc_objects
+repeatability,1,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,2,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,3,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,4,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,5,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,6,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,7,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,8,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,9,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting
+repeatability,10,,,,,,,,,,,,,,,,,fixed camera/cube/destination/start pose/lighting

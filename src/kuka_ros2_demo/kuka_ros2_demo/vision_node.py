@@ -94,7 +94,7 @@ DIST_COEFFS = np.array([
 #   ros2 run kuka_ros2_demo vision_node --ros-args -p homography_path:=/some/other/path.npy
 DEFAULT_HOMOGRAPHY_PATH = "/home/emil/kuka_ros2/src/kuka_ros2_demo/data/aruco_homography.npy"
 
-CAMERA_DEVICE_INDEX = 3
+CAMERA_DEVICE_INDEX = 2
 
 # --- HSV color ranges -- same as vision.py, still needs tuning per lighting ---
 COLOR_RANGES = {
