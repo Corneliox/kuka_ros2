@@ -1,0 +1,6 @@
+kuka_eki_msgs/KrlAxis axis
+float64 max_velocity_scaling
+
+---
+
+
