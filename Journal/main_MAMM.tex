@@ -2,7 +2,7 @@
 %
 % Complete submission-ready paper using the official Springer svproc class
 % Structure: Introduction - Research Method - Results - Discussion - Conclusion
-% Style: Clean, accessible academic English with balanced float layout
+% Features: Focused 3 core equations, streamlined Table 4, clean academic English
 %
 %%%%%%%%%%%%%%%% Springer %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -67,9 +67,9 @@ While Vision-Language-Action (VLA) models excel at semantic generalization in do
 \section{Introduction}
 \label{sec:introduction}
 
-Contactless human-robot interaction allows operators to command industrial robots using spoken words and vision instead of manual teach pendants. This capability keeps operator hands free and speeds up daily manufacturing tasks. In modern factories, rigid six-axis arms like the KUKA KR6 Agilus series are widely used because they offer high payload rigidity, rapid motion speeds, and repeatability within thirty micrometers.
+Contactless human-robot interaction allows operators to command industrial robots using spoken words and vision instead of manual teach pendants. This capability keeps operator hands free and speeds up daily manufacturing tasks. In modern factories, rigid six-axis arms like the KUKA KR6 Agilus series remain the industrial standard because they offer high structural rigidity, rapid motion speeds, and repeatability within thirty micrometers.
 
-Recently, end-to-end Vision-Language-Action (VLA) foundation models such as RT-2 \cite{rt2_2023}, OpenVLA \cite{openvla2024}, and Octo \cite{octo2024} have shown great promise. These deep neural networks take camera images and text instructions directly as input to predict robot movements. While VLA models work well for general household tasks, deploying them on industrial robot arms creates several major engineering challenges:
+Recently, end-to-end Vision-Language-Action (VLA) foundation models such as RT-2 \cite{rt2_2023}, OpenVLA \cite{openvla2024}, and Octo \cite{octo2024} have demonstrated remarkable capabilities by mapping raw camera images and natural language text directly to robot actions. However, deploying end-to-end neural policies on high-speed industrial manipulators introduces several major limitations:
 \begin{enumerate}
     \item \textbf{Spatial Accuracy}: Published benchmarks show that VLA models have positioning errors between 10 and 25 mm. In contrast, industrial vacuum grippers require millimeter accuracy (under 8 mm) to seal reliably onto parts.
     \item \textbf{Safety Guarantees}: End-to-end neural models operate as black boxes. They can suffer from trajectory jitter and cannot mathematically guarantee collision-free paths.
@@ -77,7 +77,7 @@ Recently, end-to-end Vision-Language-Action (VLA) foundation models such as RT-2
     \item \textbf{Controller Interfacing}: Industrial controllers like the KUKA KRC4 \cite{kuka_kss2018} run closed proprietary software. They are designed to execute deterministic robot language scripts rather than direct neural network streams.
 \end{enumerate}
 
-To overcome these practical barriers, this paper proposes a modular, deterministic ROS 2 framework for industrial KUKA manipulators. Instead of a single heavy deep learning model, our system separates perception, planning, and control into efficient, reliable modules. We combine lightweight offline speech recognition, 12-marker ArUco camera calibration, MoveIt 2 deterministic trajectory planning, and a direct Ethernet KRL communication bridge on port 54600. Furthermore, we include an automated benchmarking suite that runs repeatable experiments and logs physical metrics without manual operator effort.
+To overcome these barriers, this paper proposes a modular, deterministic ROS 2 framework for industrial KUKA manipulators. Instead of a single heavy deep learning model, our system separates perception, planning, and control into efficient, reliable modules. We combine lightweight offline speech recognition, 12-marker ArUco camera calibration, MoveIt 2 deterministic trajectory planning, and a direct Ethernet KRL communication bridge on port 54600. Furthermore, we include an automated benchmarking suite that runs repeatable experiments and logs physical metrics without manual operator effort.
 
 Through physical experiments on a KUKA KR6 R900-2 robot, we demonstrate an average decision latency of 1.26 seconds, a Cartesian positioning accuracy of 3.18 mm, and a 100\% pick-and-place success rate. We also provide a comprehensive comparison with modern VLA models to explain why modular deterministic pipelines remain the most practical choice for high-precision manufacturing.
 
@@ -97,10 +97,7 @@ Our framework consists of four main functional parts: physical robot interfacing
 \end{figure}
 
 \subsection{Physical Testbed and Controller Communication Setup}
-The experimental testbed uses a six-axis KUKA KR6 R900-2 Agilus robot with a 6 kg payload capacity and a 901 mm reach. The arm is controlled by a KUKA KRC4 controller running KSS 8.3 \cite{kuka_kss2018}. A custom vacuum suction gripper is attached to the robot flange. The active Tool Center Point (TCP) offset includes the mounting base length and the flexible bellows height:
-\begin{equation}
-    Z_{\text{offset}} = L_{\text{base}} + L_{\text{bellows}} = \SI{0.060}{\meter} + \SI{0.016}{\meter} = \SI{0.076}{\meter}
-\end{equation}
+The experimental testbed uses a six-axis KUKA KR6 R900-2 Agilus robot with a 6 kg payload capacity and a 901 mm reach. The arm is controlled by a KUKA KRC4 controller running KSS 8.3 \cite{kuka_kss2018}. A custom vacuum suction gripper is attached to the robot flange, providing a calibrated Tool Center Point vertical offset of $Z_{\text{offset}} = \SI{0.076}{\meter}$ (base length \SI{0.060}{\meter} plus bellows height \SI{0.016}{\meter}).
 
 The ROS 2 host computer connects to the KRC4 controller over Gigabit Ethernet at IP address 192.168.1.147 and port 54600. The KRC4 controller runs a native KRL script (\texttt{ros\_eki.src}) \cite{kuka_eki2019} that exchanges XML messages at 20 Hz. Pneumatic commands use a 500 ms vacuum dwell time ($T_{\text{vacuum}} = \SI{500}{\milli\second}$) before lifting and a 400 ms venting dwell time ($T_{\text{release}} = \SI{400}{\milli\second}$) during placement.
 
@@ -136,42 +133,25 @@ An overhead RGB camera captures the workspace from coordinates $X = \SI{338.56}{
 \label{fig:aruco_calibration}
 \end{figure}
 
-The relationship between image pixel coordinates $\tilde{\mathbf{u}} = [u, v, 1]^T$ and table world coordinates $\tilde{\mathbf{x}}_w = [X_w, Y_w, 1]^T$ is expressed by a $3 \times 3$ homography matrix $\mathbf{H}$:
+The core transformation between homogeneous image pixels $\tilde{\mathbf{u}} = [u, v, 1]^T$ and table world coordinates $\tilde{\mathbf{x}}_w = [X_w, Y_w, 1]^T$ is modeled by a $3 \times 3$ planar homography matrix $\mathbf{H}$:
 \begin{equation}
     s \begin{bmatrix} X_w \\ Y_w \\ 1 \end{bmatrix} = \mathbf{H} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \begin{bmatrix} h_{11} & h_{12} & h_{13} \\ h_{21} & h_{22} & h_{23} \\ h_{31} & h_{32} & h_{33} \end{bmatrix} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix}
 \end{equation}
+where physical coordinates are recovered via de-homogenization: $X_w = \frac{h_{11}u + h_{12}v + h_{13}}{h_{31}u + h_{32}v + h_{33}}$ and $Y_w = \frac{h_{21}u + h_{22}v + h_{23}}{h_{31}u + h_{32}v + h_{33}}$.
 
-The Cartesian coordinates on the table surface are obtained by dividing by the scale factor:
-\begin{equation}
-    X_w = \frac{h_{11}u + h_{12}v + h_{13}}{h_{31}u + h_{32}v + h_{33}}, \quad Y_w = \frac{h_{21}u + h_{22}v + h_{23}}{h_{31}u + h_{32}v + h_{33}}
-\end{equation}
-
-Each marker provides two linear equations in matrix form $\mathbf{A} \in \mathbb{R}^{24 \times 9}$:
-\begin{equation}
-    \mathbf{A}_i = \begin{bmatrix} -u_i & -v_i & -1 & 0 & 0 & 0 & u_i X_{w,i} & v_i X_{w,i} & X_{w,i} \\ 0 & 0 & 0 & -u_i & -v_i & -1 & u_i Y_{w,i} & v_i Y_{w,i} & Y_{w,i} \end{bmatrix}
-\end{equation}
-
-The homography matrix $\mathbf{H}$ is solved using Singular Value Decomposition (SVD) and RANSAC outlier filtering to remove perspective distortion:
+Compiling the 24 linear equations from the 12 marker correspondences into matrix $\mathbf{A} \in \mathbb{R}^{24 \times 9}$, the optimal homography matrix $\mathbf{H}$ is solved using Singular Value Decomposition (SVD) with RANSAC outlier rejection:
 \begin{equation}
     \mathbf{A} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^T, \quad \min_{\mathbf{H}} \sum_{i=1}^N \left\| \mathbf{x}_{w,i} - \frac{\mathbf{H} \tilde{\mathbf{u}}_i}{(\mathbf{H} \tilde{\mathbf{u}}_i)_3} \right\|^2
 \end{equation}
 
-Colored target cubes are segmented in the HSV color space using calibrated thresholds:
+Target cubes are isolated in the HSV color space. After morphological opening and closing filters, target centroids $(\bar{u}, \bar{v})$ are extracted from spatial image moments:
 \begin{equation}
-    \mathcal{B}(u,v) = \begin{cases} 1 & \text{if } H_{\text{min}} \le H(u,v) \le H_{\text{max}} \land S(u,v) \ge S_{\text{min}} \land V(u,v) \ge V_{\text{min}} \\ 0 & \text{otherwise} \end{cases}
+    \bar{u} = \frac{M_{10}}{M_{00}}, \quad \bar{v} = \frac{M_{01}}{M_{00}}, \quad \text{where } M_{pq} = \sum_{u} \sum_{v} u^p v^q \mathcal{B}'(u,v)
 \end{equation}
-
-After morphological noise filtering, the center $(\bar{u}, \bar{v})$ of the object is computed using image moments:
-\begin{equation}
-    M_{pq} = \sum_{u} \sum_{v} u^p v^q \mathcal{B}'(u,v), \quad \bar{u} = \frac{M_{10}}{M_{00}}, \quad \bar{v} = \frac{M_{01}}{M_{00}}
-\end{equation}
-Applying the homography matrix $\mathbf{H}$ to $(\bar{u}, \bar{v})$ gives the final pick coordinates $(X_{\text{pick}}, Y_{\text{pick}}, Z_{\text{pick}})$.
+Applying Eq.~(1) to $(\bar{u}, \bar{v})$ yields the target Cartesian pick coordinates $(X_{\text{pick}}, Y_{\text{pick}}, Z_{\text{pick}})$.
 
 \subsection{Trajectory Planning and Deterministic Motion Execution}
-Robot motions are planned in MoveIt 2 \cite{moveit2014} using the Pilz Industrial Motion Planner \cite{pilz_motion2021}, as visualized in Fig.~\ref{fig:moveit_planning}. Point-to-point (PTP) trajectories are used for rapid transit between the home position and approach waypoints 120 mm above the target ($Z_{\text{approach}} = Z_{\text{pick}} + \SI{120}{\milli\meter}$). Linear (LIN) motions are strictly enforced during vertical descent and lifting to prevent horizontal collisions with nearby parts. The gripper orientation is held vertically downward using fixed quaternions:
-\begin{equation}
-    \mathbf{q}_{\text{ori}} = \left[ q_x = 0.0, \, q_y = \frac{\sqrt{2}}{2}, \, q_z = 0.0, \, q_w = \frac{\sqrt{2}}{2} \right]^T
-\end{equation}
+Robot motions are planned in MoveIt 2 \cite{moveit2014} using the Pilz Industrial Motion Planner \cite{pilz_motion2021}, as visualized in Fig.~\ref{fig:moveit_planning}. Point-to-point (PTP) trajectories are used for rapid transit between the home position and approach waypoints 120 mm above the target ($Z_{\text{approach}} = Z_{\text{pick}} + \SI{120}{\milli\meter}$). Linear (LIN) motions are strictly enforced during vertical descent and lifting to prevent horizontal collisions with nearby parts. The gripper orientation is held vertically downward using a fixed unit quaternion $\mathbf{q}_{\text{ori}} = [0.0, \, \frac{\sqrt{2}}{2}, \, 0.0, \, \frac{\sqrt{2}}{2}]^T$.
 
 \begin{figure}[t!]
 \centering
@@ -275,20 +255,19 @@ The experiments achieved a 100\% pick-and-place success rate with an average Car
 To evaluate our modular framework against state-of-the-art robotic learning methods, Table~\ref{tab:vla_comparison} and Fig.~\ref{fig:vla_benchmark_dashboard} compare our results with published metrics from leading Vision-Language-Action models including OpenVLA \cite{openvla2024}, Octo \cite{octo2024}, and RT-2 \cite{rt2_2023}.
 
 \begin{table}[t!]
-\caption{Architectural and Performance Comparison: Proposed Modular ROS 2 Framework vs. End-to-End Vision-Language-Action Models.}
+\caption{Concise Comparison: Proposed Modular ROS 2 Stack vs. End-to-End VLA Models.}
 \label{tab:vla_comparison}
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llll}
 \hline
-\textbf{Evaluation Metric} & \textbf{Proposed Modular ROS 2} & \textbf{OpenVLA / Octo Models} & \textbf{Literature Basis \& Evidence} \\
+\textbf{Dimension} & \textbf{Proposed Modular ROS 2} & \textbf{VLA Models (OpenVLA / Octo / RT-2)} & \textbf{Practical Industrial Impact} \\
 \hline
-\textbf{System Architecture} & Modular decoupled stack (Speech + Vision + Plan) & Monolithic end-to-end policy (Pixels $\to$ Actions) & Decoupled modules enable rapid fault isolation and safety audits. \\
-\textbf{Hardware \& Compute} & CPU-only execution ($<$\SI{500}{\mega\byte} RAM, 0 MB GPU) & High-end GPU clusters ($\ge$\SI{16}{\giga\byte} VRAM, $>$\SI{300}{\watt}) & OpenVLA requires A100 GPU \cite{openvla2024}; our pipeline deploys on factory IPCs. \\
-\textbf{Cartesian Accuracy} & High ($3.18 \pm \SI{0.33}{\milli\meter}$ mean position error) & Coarse (\SI{10.0}{\milli\meter} to \SI{25.0}{\milli\meter} typical error) & OpenVLA tabletop error is 12--20 mm; sub-3.5 mm required for vacuum seal. \\
-\textbf{Trajectory Safety} & Deterministic collision-free planning (Pilz LIN) \cite{pilz_motion2021} & Stochastic policy rollout with potential drift & Pilz planner enforces linear paths; VLA policies exhibit trajectory jitter. \\
-\textbf{Controller Support} & Native Ethernet KRL XML bridge (Port 54600) \cite{kuka_eki2019} & Requires low-level direct joint velocity interfaces & Direct compatibility with commercial industrial controllers. \\
-\textbf{Semantic Flexibility} & Structured vocabulary with phonetic alias dictionaries & Open-vocabulary natural language instructions & VLA models excel at zero-shot novel object reasoning \cite{rt2_2023}. \\
+\textbf{Architecture} & Decoupled (Speech + Vision + MoveIt 2) & Monolithic End-to-End (Pixels $\to$ Actions) & Direct fault isolation \& modular safety audits \\
+\textbf{Compute \& RAM} & Host CPU-only ($<$\SI{500}{\mega\byte} RAM, 0 MB GPU) & High-end GPU Cluster ($\ge$\SI{16}{\giga\byte} VRAM) & Deploys on low-cost factory IPCs (\SI{15}{\watt} vs $>$\SI{300}{\watt}) \\
+\textbf{Accuracy} & High ($3.18 \pm \SI{0.33}{\milli\meter}$ error) & Coarse (\SI{10.0}{\milli\meter} to \SI{25.0}{\milli\meter} error) & Guarantees airtight vacuum seal ($<$\SI{8.0}{\milli\meter} limit) \\
+\textbf{Trajectory Safety} & Deterministic collision-free linear paths & Stochastic neural output with potential drift & Eliminates unpredicted collisions in tight cells \\
+\textbf{Controller Bridge} & Native Ethernet KRL XML (Port 54600) & Low-level joint velocity servoing & Seamless integration with KUKA KRC4 without firmware hacks \\
 \hline
 \end{tabular}%
 }
