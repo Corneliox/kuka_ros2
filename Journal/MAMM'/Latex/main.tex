@@ -2,7 +2,7 @@
 %
 % Complete submission-ready paper using the official Springer svproc class
 % Structure: Introduction - Research Method - Results - Discussion - Conclusion
-% Features: Figure 6 located in Section 3 (Results), 8 Core Equations, Clean Layout
+% Features: Figure 6 locked in Section 3 (Results), 8 Core Equations, Clean Layout
 %
 %%%%%%%%%%%%%%%% Springer %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -85,7 +85,7 @@ Our framework consists of four main functional parts: physical robot interfacing
 
 \begin{figure}[t!]
 \centering
-\includegraphics[width=0.88\textwidth]{Diagram.png}
+\includegraphics[width=0.85\textwidth]{Diagram.png}
 \caption{Complete System Architecture and ROS 2 Multimodal Communication Pipeline for KUKA Manipulator over Ethernet KRL Interface (Port 54600).}
 \label{fig:system_arch}
 \end{figure}
@@ -125,7 +125,7 @@ An overhead RGB camera captures the workspace from coordinates $X = \SI{338.56}{
 
 \begin{figure}[t!]
 \centering
-\includegraphics[width=0.88\textwidth]{images/figure2_aruco_side_by_side.png}
+\includegraphics[width=0.85\textwidth]{images/figure2_aruco_side_by_side.png}
 \caption{Perspective-Corrected Vision Calibration Pipeline: (a) Raw overhead camera frame of the workspace table, and (b) Detected twelve-marker ArUco constellation and color-segmented target centroids.}
 \label{fig:aruco_calibration}
 \end{figure}
@@ -169,7 +169,7 @@ Trajectory generation is performed within MoveIt 2 \cite{moveit2014} utilizing t
 
 \begin{figure}[t!]
 \centering
-\includegraphics[width=0.85\textwidth]{images/rviz_planning_screenshot.png}
+\includegraphics[width=0.82\textwidth]{images/rviz_planning_screenshot.png}
 \caption{MoveIt 2 Trajectory Planning Scene and RViz Visualization Environment for KUKA KR6 R900-2 Manipulator.}
 \label{fig:moveit_planning}
 \end{figure}
@@ -212,7 +212,7 @@ Physical Trajectory Execution & KUKA KRC4 Motion & $76526 \pm 3150$ \\
 
 \begin{figure}[t!]
 \centering
-\includegraphics[width=0.82\textwidth]{images/figure4_latency_chart.png}
+\includegraphics[width=0.72\textwidth]{images/figure4_latency_chart.png}
 \caption{End-to-End Decision Latency Profile: (a) Measured timing breakdown across perception, planning, and communication subsystems, and (b) Total response latency compared with the 1.5-second human-robot interaction threshold.}
 \label{fig:latency_chart}
 \end{figure}
@@ -245,7 +245,7 @@ Run 5 (Yellow Cube) & SUCCESS (Retry) & 3.60 & $1.68^\circ$ (max $3.10^\circ$) &
 
 \begin{figure}[t!]
 \centering
-\includegraphics[width=0.76\textwidth]{images/figure5_position_error_chart.png}
+\includegraphics[width=0.68\textwidth]{images/figure5_position_error_chart.png}
 \caption{Physical Cartesian Positioning Error across Five Baseline Trials compared with the 8.0 mm Vacuum Suction Cup Sealing Limit and Typical Vision-Language-Action Policy Residuals.}
 \label{fig:pos_error_chart}
 \end{figure}
@@ -257,11 +257,12 @@ Figure~\ref{fig:vla_benchmark_dashboard} provides a multi-dimensional quantitati
 
 \begin{figure}[t!]
 \centering
-\includegraphics[width=0.88\textwidth]{images/figure6_vla_benchmark_comparison.png}
+\includegraphics[width=0.76\textwidth]{images/figure6_vla_benchmark_comparison.png}
 \caption{Quantitative Multi-Dimensional Benchmark Dashboard: Comparing Proposed Modular ROS 2 Stack against Leading Vision-Language-Action Models (Octo, OpenVLA, RT-2) across (a) Cartesian Positioning Precision, (b) GPU Memory Footprint, (c) Decision \& Planning Latency, and (d) Host Computational Power Draw.}
 \label{fig:vla_benchmark_dashboard}
 \end{figure}
 
+\FloatBarrier
 % =========================================================================
 % SECTION 4: DISCUSSION
 % =========================================================================
