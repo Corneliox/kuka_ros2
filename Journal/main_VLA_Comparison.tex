@@ -78,13 +78,10 @@ Recently, Vision-Language-Action models have gained significant attention. Broha
 
 The proposed system consists of five interconnected layers comprising human perception, task coordination, motion planning, network bridging, and physical hardware execution.
 
-% -------------------------------------------------------------------------
-% FIGURE 1: User specified Diagram.png
-% -------------------------------------------------------------------------
 \begin{figure*}[tb]
 \centering
-\includegraphics[width=0.92\textwidth]{Diagram.png}
-\caption{Complete System Architecture and ROS 2 Multimodal Communication Pipeline for KUKA Manipulator over Ethernet KRL Interface (Port 54600).}
+\includegraphics[width=0.95\textwidth]{images/system_architecture_diagram.png}
+\caption{Complete System Architecture and ROS 2 Communication Pipeline for KUKA Manipulator over Ethernet KRL Interface.}
 \label{fig:system_arch}
 \end{figure*}
 
@@ -120,13 +117,10 @@ Visual scene capture is provided by an overhead RGB camera positioned at a fixed
 \end{tabular}
 \end{table}
 
-% -------------------------------------------------------------------------
-% FIGURE 2: User specified composite (frame.png to aruco_debug.png)
-% -------------------------------------------------------------------------
 \begin{figure*}[tb]
 \centering
-\includegraphics[width=0.92\textwidth]{../images/figure2_aruco_side_by_side.png}
-\caption{Perspective-Corrected Vision Calibration Pipeline: (a) Raw overhead camera frame of the workspace table, and (b) Detected twelve-marker ArUco constellation and color-segmented target centroids.}
+\includegraphics[width=0.88\textwidth]{images/aruco_debug.png}
+\caption{Twelve-Marker ArUco Constellation Layout and Perspective-Corrected Workspace Homography Calibration.}
 \label{fig:aruco_calibration}
 \end{figure*}
 
@@ -167,13 +161,10 @@ Trajectory generation is performed within MoveIt 2 utilizing the Pilz Industrial
     \mathbf{q}_{\text{ori}} = \left[ q_x = 0.0, \, q_y = \frac{\sqrt{2}}{2}, \, q_z = 0.0, \, q_w = \frac{\sqrt{2}}{2} \right]^T
 \end{equation}
 
-% -------------------------------------------------------------------------
-% FIGURE 3: User specified Screenshot 2026-08-31 155304.png
-% -------------------------------------------------------------------------
 \begin{figure*}[tb]
 \centering
-\includegraphics[width=0.92\textwidth]{../images/rviz_planning_screenshot.png}
-\caption{MoveIt 2 Trajectory Planning Scene and RViz Visualization Environment for KUKA KR6 R900-2 Manipulator.}
+\includegraphics[width=0.88\textwidth]{images/rviz_moveit_planning.png}
+\caption{MoveIt 2 Trajectory Planning Scene and Cartesian Waypoint Path in RViz.}
 \label{fig:moveit_planning}
 \end{figure*}
 
