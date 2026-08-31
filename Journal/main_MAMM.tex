@@ -2,7 +2,7 @@
 %
 % Complete submission-ready paper using the official Springer svproc class
 % Structure: Introduction - Research Method - Results - Discussion - Conclusion
-% Style: Clear, accessible, professional academic English (IMRaD)
+% Style: Clean, accessible academic English with balanced float layout
 %
 %%%%%%%%%%%%%%%% Springer %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -18,6 +18,12 @@
 \usepackage{hyperref}
 
 \def\UrlFont{\rmfamily}
+
+% Professional float parameters to prevent empty/sparse float-only pages
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.90}
+\renewcommand{\textfraction}{0.10}
+\renewcommand{\floatpagefraction}{0.85}
 
 \hypersetup{
     colorlinks=true,
@@ -83,9 +89,9 @@ Through physical experiments on a KUKA KR6 R900-2 robot, we demonstrate an avera
 
 Our framework consists of four main functional parts: physical robot interfacing, multimodal perception, motion planning, and an automated benchmarking pipeline.
 
-\begin{figure}[htbp]
+\begin{figure}[t!]
 \centering
-\includegraphics[width=0.90\textwidth]{Diagram.png}
+\includegraphics[width=0.88\textwidth]{Diagram.png}
 \caption{Complete System Architecture and ROS 2 Multimodal Communication Pipeline for KUKA Manipulator over Ethernet KRL Interface (Port 54600).}
 \label{fig:system_arch}
 \end{figure}
@@ -101,16 +107,9 @@ The ROS 2 host computer connects to the KRC4 controller over Gigabit Ethernet at
 \subsection{Multimodal Perception and Perspective-Corrected Vision}
 Voice commands are recorded at 16 kHz using a directional microphone. Spoken words are decoded locally using the lightweight offline Vosk speech recognition engine \cite{vosk2020} with the small English acoustic model. To handle factory background noise, the keyword extractor includes phonetic aliases for target colors, such as red variants $\{\text{red}, \text{right}, \text{read}, \text{rad}\}$, yellow variants $\{\text{yellow}, \text{yeah}, \text{yell}, \text{hello}\}$, and blue variants $\{\text{blue}, \text{do}, \text{woah}\}$. Decoded commands are sent as JSON messages on the voice topic.
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.90\textwidth]{images/figure2_aruco_side_by_side.png}
-\caption{Perspective-Corrected Vision Calibration Pipeline: (a) Raw overhead camera frame of the workspace table, and (b) Detected twelve-marker ArUco constellation and color-segmented target centroids.}
-\label{fig:aruco_calibration}
-\end{figure}
+An overhead RGB camera captures the workspace from coordinates $X = \SI{338.56}{\milli\meter}, Y = \SI{10.12}{\milli\meter}$, and $Z = \SI{1091.51}{\milli\meter}$. To accurately convert camera pixels into robot base coordinates, a planar pattern of twelve ArUco markers \cite{aruco2014} is fixed across the table. Table~\ref{tab:aruco_coords} lists the measured ground-truth coordinates of all twelve markers, and Fig.~\ref{fig:aruco_calibration} illustrates the vision calibration pipeline.
 
-An overhead RGB camera captures the workspace from coordinates $X = \SI{338.56}{\milli\meter}, Y = \SI{10.12}{\milli\meter}$, and $Z = \SI{1091.51}{\milli\meter}$. To accurately convert camera pixels into robot base coordinates, a planar pattern of twelve ArUco markers \cite{aruco2014} is fixed across the table. Table~\ref{tab:aruco_coords} lists the measured ground-truth coordinates of all twelve markers.
-
-\begin{table}[htbp]
+\begin{table}[t!]
 \caption{Ground-Truth World Coordinates of the Twelve ArUco Calibration Markers.}
 \label{tab:aruco_coords}
 \centering
@@ -129,6 +128,13 @@ An overhead RGB camera captures the workspace from coordinates $X = \SI{338.56}{
 \end{tabular}%
 }
 \end{table}
+
+\begin{figure}[t!]
+\centering
+\includegraphics[width=0.88\textwidth]{images/figure2_aruco_side_by_side.png}
+\caption{Perspective-Corrected Vision Calibration Pipeline: (a) Raw overhead camera frame of the workspace table, and (b) Detected twelve-marker ArUco constellation and color-segmented target centroids.}
+\label{fig:aruco_calibration}
+\end{figure}
 
 The relationship between image pixel coordinates $\tilde{\mathbf{u}} = [u, v, 1]^T$ and table world coordinates $\tilde{\mathbf{x}}_w = [X_w, Y_w, 1]^T$ is expressed by a $3 \times 3$ homography matrix $\mathbf{H}$:
 \begin{equation}
@@ -162,14 +168,14 @@ After morphological noise filtering, the center $(\bar{u}, \bar{v})$ of the obje
 Applying the homography matrix $\mathbf{H}$ to $(\bar{u}, \bar{v})$ gives the final pick coordinates $(X_{\text{pick}}, Y_{\text{pick}}, Z_{\text{pick}})$.
 
 \subsection{Trajectory Planning and Deterministic Motion Execution}
-Robot motions are planned in MoveIt 2 \cite{moveit2014} using the Pilz Industrial Motion Planner \cite{pilz_motion2021}. Point-to-point (PTP) trajectories are used for rapid transit between the home position and approach waypoints 120 mm above the target ($Z_{\text{approach}} = Z_{\text{pick}} + \SI{120}{\milli\meter}$). Linear (LIN) motions are strictly enforced during vertical descent and lifting to prevent horizontal collisions with nearby parts. The gripper orientation is held vertically downward using fixed quaternions:
+Robot motions are planned in MoveIt 2 \cite{moveit2014} using the Pilz Industrial Motion Planner \cite{pilz_motion2021}, as visualized in Fig.~\ref{fig:moveit_planning}. Point-to-point (PTP) trajectories are used for rapid transit between the home position and approach waypoints 120 mm above the target ($Z_{\text{approach}} = Z_{\text{pick}} + \SI{120}{\milli\meter}$). Linear (LIN) motions are strictly enforced during vertical descent and lifting to prevent horizontal collisions with nearby parts. The gripper orientation is held vertically downward using fixed quaternions:
 \begin{equation}
     \mathbf{q}_{\text{ori}} = \left[ q_x = 0.0, \, q_y = \frac{\sqrt{2}}{2}, \, q_z = 0.0, \, q_w = \frac{\sqrt{2}}{2} \right]^T
 \end{equation}
 
-\begin{figure}[htbp]
+\begin{figure}[t!]
 \centering
-\includegraphics[width=0.90\textwidth]{images/rviz_planning_screenshot.png}
+\includegraphics[width=0.85\textwidth]{images/rviz_planning_screenshot.png}
 \caption{MoveIt 2 Trajectory Planning Scene and RViz Visualization Environment for KUKA KR6 R900-2 Manipulator.}
 \label{fig:moveit_planning}
 \end{figure}
@@ -184,7 +190,6 @@ To avoid manual testing errors, we built an automated benchmarking program (\tex
     \item Records physical positioning accuracy, joint tracking errors, and total duration to a structured CSV file.
 \end{enumerate}
 
-\FloatBarrier
 % =========================================================================
 % SECTION 3: RESULTS
 % =========================================================================
@@ -194,7 +199,7 @@ To avoid manual testing errors, we built an automated benchmarking program (\tex
 \subsection{Subsystem Latency Breakdown and Cycle Time Profile}
 Table~\ref{tab:latency_breakdown} and Fig.~\ref{fig:latency_chart} show the measured time breakdown across each subsystem. The average decision latency—from the end of the voice command to the start of physical arm motion—was \SI{1262}{\milli\second} (\SI{1.26}{\second}). This meets standard human-robot interaction guidelines, which recommend a response time under 1.5 seconds.
 
-\begin{table}[htbp]
+\begin{table}[t!]
 \caption{Measured End-to-End Latency Breakdown Across Hardware and Software Subsystems.}
 \label{tab:latency_breakdown}
 \centering
@@ -218,9 +223,9 @@ Physical Trajectory Execution & KUKA KRC4 Motion & $76526 \pm 3150$ \\
 }
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[t!]
 \centering
-\includegraphics[width=0.90\textwidth]{images/figure4_latency_chart.png}
+\includegraphics[width=0.82\textwidth]{images/figure4_latency_chart.png}
 \caption{End-to-End Decision Latency Profile: (a) Measured timing breakdown across perception, planning, and communication subsystems, and (b) Total response latency compared with the 1.5-second human-robot interaction threshold.}
 \label{fig:latency_chart}
 \end{figure}
@@ -230,7 +235,7 @@ The total pick-and-place cycle time averaged \SI{76.52}{\second} during laborato
 \subsection{Physical Baseline Benchmark Performance}
 Table~\ref{tab:benchmark_summary} and Fig.~\ref{fig:pos_error_chart} present the physical baseline test results across five consecutive runs on the KUKA KR6 R900-2 robot.
 
-\begin{table}[htbp]
+\begin{table}[t!]
 \caption{Empirical Performance Summary on Physical KUKA Robot Testbed.}
 \label{tab:benchmark_summary}
 \centering
@@ -251,16 +256,15 @@ Run 5 (Yellow Cube) & SUCCESS (Retry) & 3.60 & $1.68^\circ$ (max $3.10^\circ$) &
 }
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[t!]
 \centering
-\includegraphics[width=0.82\textwidth]{images/figure5_position_error_chart.png}
+\includegraphics[width=0.76\textwidth]{images/figure5_position_error_chart.png}
 \caption{Physical Cartesian Positioning Error across Five Baseline Trials compared with the 8.0 mm Vacuum Suction Cup Sealing Limit and Typical Vision-Language-Action Policy Residuals.}
 \label{fig:pos_error_chart}
 \end{figure}
 
 The experiments achieved a 100\% pick-and-place success rate with an average Cartesian positioning error of \SI{3.18}{\milli\meter} and a joint tracking error of $1.55^\circ$. All trials operated well inside the \SI{8.0}{\milli\meter} vacuum sealing tolerance limit.
 
-\FloatBarrier
 % =========================================================================
 % SECTION 4: DISCUSSION
 % =========================================================================
@@ -270,7 +274,7 @@ The experiments achieved a 100\% pick-and-place success rate with an average Car
 \subsection{Comparative Analysis against Vision-Language-Action Models}
 To evaluate our modular framework against state-of-the-art robotic learning methods, Table~\ref{tab:vla_comparison} and Fig.~\ref{fig:vla_benchmark_dashboard} compare our results with published metrics from leading Vision-Language-Action models including OpenVLA \cite{openvla2024}, Octo \cite{octo2024}, and RT-2 \cite{rt2_2023}.
 
-\begin{table}[htbp]
+\begin{table}[t!]
 \caption{Architectural and Performance Comparison: Proposed Modular ROS 2 Framework vs. End-to-End Vision-Language-Action Models.}
 \label{tab:vla_comparison}
 \centering
@@ -290,9 +294,9 @@ To evaluate our modular framework against state-of-the-art robotic learning meth
 }
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[t!]
 \centering
-\includegraphics[width=0.90\textwidth]{images/figure6_vla_benchmark_comparison.png}
+\includegraphics[width=0.88\textwidth]{images/figure6_vla_benchmark_comparison.png}
 \caption{Quantitative Multi-Dimensional Benchmark Dashboard: Comparing Proposed Modular ROS 2 Stack against Leading Vision-Language-Action Models (Octo, OpenVLA, RT-2) across (a) Cartesian Positioning Precision, (b) GPU Memory Footprint, (c) Decision \& Planning Latency, and (d) Host Computational Power Draw.}
 \label{fig:vla_benchmark_dashboard}
 \end{figure}
@@ -392,7 +396,7 @@ The empirical metrics presented in Table~\ref{tab:latency_breakdown} and Table~\
 \subsection*{Newly Formed Automated Protocol for Full-Scale Data Collection}
 To establish statistical rigor across diverse operational conditions, a fully automated benchmarking pipeline (\texttt{auto\_benchmark\_runner.py} / \texttt{run\_master\_pipeline.py}) has been established. This pipeline eliminates manual image capture, terminal command dispatch, and manual coordinate recording. The complete 50-run experimental matrix is actively being expanded following the structured protocol defined in Table~\ref{tab:protocol_roadmap}.
 
-\begin{table}[htbp]
+\begin{table}[t!]
 \caption{Full-Scale 50-Run Experimental Benchmarking Roadmap.}
 \label{tab:protocol_roadmap}
 \centering
