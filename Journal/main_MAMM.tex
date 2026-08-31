@@ -1,7 +1,7 @@
 %%%%%%%%%%%%%%%%%%%% main.tex %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % Complete submission-ready paper using the official Springer svproc class
-% for MAMM (Mechanisms and Machine Science / Springer Proceedings)
+% Structure: Introduction - Research Method - Results - Discussion - Conclusion
 %
 %%%%%%%%%%%%%%%% Springer %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -33,23 +33,25 @@
 
 \titlerunning{Deterministic ROS 2 Manipulation vs. VLA Models}
 
-\author{Cornelio Abdimash\inst{1} \and Author Two\inst{1} \and Author Three\inst{2}}
+\author{Author One\inst{1} \and Author Two\inst{2} \and Author Three\inst{3}}
 
-\authorrunning{C. Abdimash et al.}
+\authorrunning{Lastname et al.}
 
-\tocauthor{Cornelio Abdimash, Author Two, and Author Three}
+\tocauthor{Author One, Author Two, and Author Three}
 
 \institute{Department of Mechanical and Automation Engineering, Asia University, Taichung, Taiwan\\
-\email{cornelioabdimash@gmail.com}
+\email{youremail@gmail.com}
 \and
-Department of Computer Science and Information Engineering, Asia University, Taichung, Taiwan}
+Department of Computer Science and Information Engineering, Asia University, Taichung, Taiwan
+\and
+Department of Mechanical and Automation Engineering, Asia University, Taichung, Taiwan}
 
 \maketitle              % typeset the title of the contribution
 
 \begin{abstract}
-Modern robotics has witnessed a surge in end-to-end Vision-Language-Action models that directly predict actions from visual observations and language prompts. Although Vision-Language-Action policies exhibit remarkable semantic generalization across diverse domestic scenes, their deployment in rigid industrial manufacturing remains severely hindered by stochastic trajectory drift, lack of collision safety guarantees, high computational demands, and spatial positioning errors frequently exceeding fifteen millimeters. In this paper, we present a deterministic multimodal framework for color-coded material handling using ROS 2 \cite{ros2_2022} and an industrial six-axis KUKA KR6 R900-2 manipulator. The architecture combines an offline lightweight speech recognition engine with phonetic alias mapping, perspective-corrected planar homography using a twelve-marker ArUco constellation, and MoveIt 2 \cite{moveit2014} motion planning with the Pilz Industrial Motion Planner. Communication with the proprietary KUKA KRC4 controller \cite{kuka_kss2018} is established over standard TCP/IP using the Ethernet KRL Interface \cite{kuka_eki2019} on port 54600. To address the limitations of conventional manual experimentation, we also introduce an automated benchmarking runner that autonomously queries perception services, verifies workspace safety boundaries, commands physical execution, and logs joint-level telemetry. Physical evaluations on the real robotic testbed achieve a mean decision latency of \SI{1.26}{\second}, an average Cartesian positioning error of \SI{3.18}{\milli\meter}, a mean joint tracking error of $1.55^\circ$, and a \SI{100.0}{\percent} pick-and-place success rate across physical baseline trials. We contrast our modular engineering architecture against state-of-the-art Vision-Language-Action models, highlighting why deterministic planning and lightweight perception remain indispensable for high-precision industrial automation.
+While Vision-Language-Action (VLA) models excel at semantic generalization in domestic environments, their industrial deployment is hindered by trajectory drift, high computational demands, lack of safety guarantees, and positioning errors exceeding 15 mm. To address these limitations, this paper presents a deterministic multimodal framework for color-coded material handling using ROS 2 \cite{ros2_2022} and an industrial six-axis KUKA KR6 R900-2 manipulator. The architecture combines an offline lightweight speech recognition engine with phonetic alias mapping, perspective-corrected planar homography using a 12-marker ArUco constellation, and MoveIt 2 \cite{moveit2014} motion planning with the Pilz Industrial Motion Planner. Direct communication with the proprietary KUKA KRC4 controller \cite{kuka_kss2018} is established over standard TCP/IP using the Ethernet KRL Interface \cite{kuka_eki2019} on port 54600. Additionally, an automated benchmarking runner autonomously queries perception services, verifies workspace safety boundaries, commands physical execution, and logs joint-level telemetry. Physical evaluations demonstrate a mean decision latency of 1.26 seconds, an average Cartesian positioning error of 3.18 mm, a mean joint tracking error of $1.55^\circ$, and a 100\% pick-and-place success rate across baseline trials. Contrasting this modular architecture against state-of-the-art VLA models highlights why deterministic planning and lightweight perception remain indispensable for high-precision industrial automation.
 
-\keywords{Human-Robot Interaction, Vision-Language-Action Models, Industrial Automation, KUKA Robot, Ethernet KRL, MoveIt 2, Automated Benchmarking, Planar Homography.}
+\keywords{Automation, Vision-Language-Action (VLA), Deterministic Motion Planning, Human-Robot Interaction, KUKA Robot, Ethernet KRL, MoveIt 2, Planar Homography.}
 \end{abstract}
 
 % =========================================================================
@@ -58,35 +60,21 @@ Modern robotics has witnessed a surge in end-to-end Vision-Language-Action model
 \section{Introduction}
 \label{sec:introduction}
 
-Contactless human-robot interaction has emerged as an essential capability for modern manufacturing and collaborative workstations. Allowing human operators to direct robotic manipulators through spoken natural language and visual tracking eliminates physical teach-pendant interaction and keeps operator hands free for assembly or inspection tasks. While lightweight collaborative robots are widely adopted in research laboratories, rigid six-axis industrial arms such as the KUKA KR6 Agilus series remain the standard choice in manufacturing due to their superior structural rigidity, high operational velocities, and repeatability within thirty micrometers.
+Contactless human-robot interaction has emerged as an essential capability for modern smart manufacturing and collaborative assembly workstations. Allowing human operators to direct robotic manipulators through spoken natural language and visual tracking eliminates physical teach-pendant interaction, reduces setup times, and keeps operator hands free for dexterous inspection tasks. While lightweight collaborative robots are widely adopted in research laboratories, rigid six-axis industrial arms such as the KUKA KR6 Agilus series remain the foundational standard in manufacturing due to their superior structural rigidity, high operational velocities, and repeatability within thirty micrometers.
 
-In recent years, end-to-end Vision-Language-Action models such as RT-2 \cite{rt2_2023}, OpenVLA \cite{openvla2024}, and Octo \cite{octo2024} have demonstrated impressive open-vocabulary generalization in tabletop environments. These transformer-based policies map raw camera frames and text prompts directly to continuous end-effector displacements. However, transferring end-to-end foundation models to high-payload industrial arms introduces significant engineering bottlenecks. Vision-Language-Action policies operate as probabilistic black boxes without formal collision-free guarantees, rendering them susceptible to unpredictable trajectory jitter. Furthermore, published empirical benchmarks indicate that OpenVLA \cite{openvla2024} and Octo \cite{octo2024} exhibit spatial accuracy typically ranging between ten and twenty-five millimeters, which is insufficient for rigid industrial tolerances where vacuum suction cups and mechanical grippers demand millimeter-level precision. In addition, these large models require high-end graphics workstations with substantial power consumption, making them impractical for cost-constrained factory floors.
+In recent years, end-to-end Vision-Language-Action (VLA) models such as RT-2 \cite{rt2_2023}, OpenVLA \cite{openvla2024}, and Octo \cite{octo2024} have demonstrated impressive open-vocabulary generalization in tabletop environments. These transformer-based policies map raw camera frames and text prompts directly to continuous end-effector displacements. However, transferring end-to-end foundation models to high-payload industrial arms introduces significant engineering bottlenecks. Vision-Language-Action policies operate as probabilistic black boxes without formal collision-free guarantees, rendering them susceptible to unpredictable trajectory jitter. Furthermore, published empirical benchmarks indicate that OpenVLA \cite{openvla2024} and Octo \cite{octo2024} exhibit spatial accuracy typically ranging between ten and twenty-five millimeters, which is insufficient for rigid industrial tolerances where vacuum suction cups and mechanical grippers demand millimeter-level precision. In addition, these large models require high-end graphics workstations with substantial power consumption, making them impractical for cost-constrained factory floors.
 
-Beyond perception challenges, connecting external intelligence to commercial industrial controllers such as the KUKA KRC4 \cite{kuka_kss2018} presents communication barriers. Industrial controllers are purpose-built for deterministic execution of proprietary robot language scripts rather than external sensor streams. Fieldbus solutions like Fast Robot Interface \cite{lbr_stack2024} are expensive and restricted to specialized research robots. Standard industrial units must communicate over Ethernet KRL Interface sockets \cite{kuka_eki_eval2022}, which introduce variable network delays that require structured trajectory smoothing. Moreover, experimental validation of robotic handling systems is often conducted through labor-intensive manual workflows where operators repeatedly capture images, transcribe coordinates, trigger terminal commands, and measure physical residuals by hand.
+Interfacing external intelligence to commercial industrial controllers such as the KUKA KRC4 \cite{kuka_kss2018} also presents communication barriers. Industrial controllers are purpose-built for deterministic execution of proprietary robot language scripts rather than external sensor streams. While research interfaces such as JOpenShowVar \cite{jopenshowvar2015} and the LBR-Stack \cite{lbr_stack2024} exist for specialized robots, standard industrial units must communicate over Ethernet KRL Interface (EKI) sockets \cite{kuka_eki_eval2022}, requiring structured trajectory interpolation. Multimodal interaction pipelines that separate speech recognition \cite{vosk2020}, visual tracking \cite{quirubot2016,schafer2023smart}, and deterministic motion planning \cite{voice_ros2_2024,pilz_motion2021} offer an attractive alternative, but their validation is often hindered by labor-intensive manual benchmarking workflows.
 
-To address these industrial requirements, this paper presents a deterministic multimodal manipulation pipeline and an automated benchmarking suite for a six-axis KUKA KR6 R900-2 industrial manipulator governed by ROS 2 \cite{ros2_2022}. Rather than relying on resource-intensive end-to-end deep neural policies, we propose a modular architecture that integrates on-device speech recognition, perspective-corrected homography vision, and MoveIt 2 \cite{moveit2014} deterministic motion planning. The system connects directly to the KUKA KRC4 controller through Ethernet KRL sockets without requiring external hardware modifications. Through empirical evaluations on physical hardware, we demonstrate sub-3.5 millimeter Cartesian precision, a 1.26-second decision latency, and complete pick-and-place reliability while outlining a systematic comparison against modern Vision-Language-Action paradigms.
-
-% =========================================================================
-% SECTION 2: RELATED WORK
-% =========================================================================
-\section{Related Work and Paradigm Comparison}
-\label{sec:related_work}
-
-\subsection{Industrial Controller Interfacing in ROS 2}
-Interfacing external computation with closed industrial manipulators has been investigated across several architectural paradigms. Sanfilippo et al. \cite{jopenshowvar2015} introduced JOpenShowVar, allowing external applications to read and write variables in KUKA controllers over cross-network sockets. Kunz et al. \cite{lbr_stack2024} established the LBR-Stack, providing hardware control drivers for lightweight KUKA collaborative arms through the Fast Robot Interface. For standard industrial arms such as the Agilus and Cybertech families, the Ethernet KRL Interface remains the practical communication channel. Vargas et al. \cite{kuka_eki_eval2022} conducted latency evaluations demonstrating that Ethernet KRL enables robust trajectory execution when paired with client-side interpolation. Our framework leverages Ethernet KRL XML communication on port 54600, establishing a deterministic real-time bridge between ROS 2 motion planning and the native KRC4 motion executive.
-
-\subsection{Multimodal Interaction versus Vision-Language-Action Models}
-Multimodal robot guidance has traditionally relied on pipeline architectures that separate speech recognition, visual scene estimation, and motion synthesis. Mendoza-Larios et al. \cite{quirubot2016} presented Quirubot for surgical instrument delivery using speech recognition and contour vision. Sch{\"a}fer et al. \cite{schafer2023smart} demonstrated multimodal assistants for tool tracking in clinical environments. Radhakrishnan et al. \cite{voice_ros2_2024} evaluated voice-driven manipulation in ROS 2, noting that cloud-dependent voice services suffer from network latency and acoustic noise.
-
-Recently, Vision-Language-Action models have gained significant attention. Brohan et al. \cite{rt2_2023} developed RT-2, showing that web-scale vision-language models can be fine-tuned to output robotic action tokens. Kim et al. \cite{openvla2024} proposed OpenVLA, an open-source seven-billion-parameter policy capable of multi-task tabletop manipulation. Octo \cite{octo2024} introduced a diffusion-based policy for multi-robot control across varied sensor modalities. While these models excel in semantic reasoning across novel environments, their computational overhead requires dedicated graphics processing clusters. More critically, published benchmarks show that open-loop Cartesian positioning errors exceed ten millimeters, and their unconstrained trajectory outputs lack collision safety verification. Our work demonstrates that for structured industrial tasks, a modular deterministic pipeline provides superior spatial accuracy, guaranteed collision safety, minimal latency, and zero GPU dependence.
+To address these challenges, this paper presents a deterministic multimodal manipulation pipeline and an automated benchmarking suite for a six-axis KUKA KR6 R900-2 industrial manipulator governed by ROS 2 \cite{ros2_2022}. Rather than relying on resource-intensive end-to-end neural policies, we propose a modular architecture that integrates on-device speech recognition, perspective-corrected homography vision, and MoveIt 2 \cite{moveit2014} deterministic motion planning. The system connects directly to the KUKA KRC4 controller through Ethernet KRL sockets without requiring external hardware modifications. Through empirical evaluations on physical hardware, we demonstrate sub-3.5 millimeter Cartesian precision, a 1.26-second decision latency, and complete pick-and-place reliability while outlining a systematic comparison against modern Vision-Language-Action paradigms.
 
 % =========================================================================
-% SECTION 3: SYSTEM ARCHITECTURE AND METHODOLOGY
+% SECTION 2: RESEARCH METHOD
 % =========================================================================
-\section{System Architecture and Methodology}
+\section{Research Method}
 \label{sec:methodology}
 
-The proposed system consists of five interconnected layers comprising human perception, task coordination, motion planning, network bridging, and physical hardware execution.
+The proposed research methodology consists of four core technical components: system architecture and physical controller interfacing, multimodal perception and perspective calibration, deterministic trajectory planning, and an automated benchmarking workflow.
 
 \begin{figure}[htbp]
 \centering
@@ -95,7 +83,7 @@ The proposed system consists of five interconnected layers comprising human perc
 \label{fig:system_arch}
 \end{figure}
 
-\subsection{Physical Testbed and Communication Setup}
+\subsection{Physical Testbed and Controller Communication Setup}
 The experimental testbed features a six-axis KUKA KR6 R900-2 sixx Agilus industrial robot with a six-kilogram payload capacity, a reach of 901 millimeters, and a repeatability of plus or minus thirty micrometers. The manipulator is driven by a KUKA KRC4 compact controller running KUKA System Software 8.3 \cite{kuka_kss2018}. A custom vacuum gripper is mounted on the mechanical flange. The suction cup contact surface defines the active Tool Center Point with a calibrated vertical offset computed as the sum of the mounting base length and the flexible bellows height:
 \begin{equation}
     Z_{\text{offset}} = L_{\text{base}} + L_{\text{bellows}} = \SI{0.060}{\meter} + \SI{0.016}{\meter} = \SI{0.076}{\meter}
@@ -103,11 +91,17 @@ The experimental testbed features a six-axis KUKA KR6 R900-2 sixx Agilus industr
 
 The ROS 2 workstation communicates with the KRC4 controller over a dedicated Gigabit Ethernet link at IP address 192.168.1.147 and port 54600. The controller executes a native KRL daemon script (\texttt{ros\_eki.src}) \cite{kuka_eki2019} that cyclically receives XML command telegrams and transmits actual joint position telemetry at twenty Hertz. Pneumatic actuation commands are published on the gripper topic, incorporating a 500-millisecond vacuum buildup dwell ($T_{\text{vacuum}} = \SI{500}{\milli\second}$) before lifting and a 400-millisecond venting dwell ($T_{\text{release}} = \SI{400}{\milli\second}$) at the placement destination.
 
-\subsection{Acoustic Perception and Speech Recognition Pipeline}
+\subsection{Multimodal Perception and Perspective-Corrected Vision}
 Spoken operator instructions are captured via a directional microphone sampled at sixteen kilohertz. Acoustic decoding is performed locally using the Vosk automatic speech recognition engine \cite{vosk2020} loaded with the lightweight \texttt{vosk-model-small-}\allowbreak\texttt{en-us} model. To ensure robust operation in industrial environments characterized by ambient acoustic noise, phonetic alias sets are integrated into the keyword extractor. Target color commands are mapped to phonetic variants including red variants $\{\text{red}, \text{right}, \text{read}, \text{rad}\}$, yellow variants $\{\text{yellow}, \text{yeah}, \text{yell}, \text{hello}\}$, and blue variants $\{\text{blue}, \text{do}, \text{woah}\}$. Decoded intent tokens are published as JSON payloads on the voice command topic.
 
-\subsection{Perspective-Corrected Vision and Coordinate Mapping}
-Visual scene capture is provided by an overhead RGB camera positioned at a fixed observation pose with coordinates $X = \SI{338.56}{\milli\meter}, Y = \SI{10.12}{\milli\meter}$, and $Z = \SI{1091.51}{\milli\meter}$. To establish a transformation between image pixels and the robot base coordinate frame, a planar constellation of twelve ArUco markers \cite{aruco2014} is affixed across the workspace table. The ground-truth positions of all twelve markers measured in the KUKA base coordinate frame are presented in Table~\ref{tab:aruco_coords}.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.90\textwidth]{images/figure2_aruco_side_by_side.png}
+\caption{Perspective-Corrected Vision Calibration Pipeline: (a) Raw overhead camera frame of the workspace table, and (b) Detected twelve-marker ArUco constellation and color-segmented target centroids.}
+\label{fig:aruco_calibration}
+\end{figure}
+
+Visual scene capture is provided by an overhead RGB camera positioned at a fixed observation pose ($X = \SI{338.56}{\milli\meter}, Y = \SI{10.12}{\milli\meter}, Z = \SI{1091.51}{\milli\meter}$). To establish a transformation between image pixels and the robot base coordinate frame, a planar constellation of twelve ArUco markers \cite{aruco2014} is affixed across the workspace table. The ground-truth positions of all twelve markers measured in the KUKA base coordinate frame are presented in Table~\ref{tab:aruco_coords}.
 
 \begin{table}[htbp]
 \caption{Ground-Truth World Coordinates of the Twelve ArUco Calibration Markers.}
@@ -129,13 +123,6 @@ Visual scene capture is provided by an overhead RGB camera positioned at a fixed
 }
 \end{table}
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.90\textwidth]{images/figure2_aruco_side_by_side.png}
-\caption{Perspective-Corrected Vision Calibration Pipeline: (a) Raw overhead camera frame of the workspace table, and (b) Detected twelve-marker ArUco constellation and color-segmented target centroids.}
-\label{fig:aruco_calibration}
-\end{figure}
-
 The transformation between homogeneous pixel coordinates $\tilde{\mathbf{u}} = [u, v, 1]^T$ and workspace table plane coordinates $\tilde{\mathbf{x}}_w = [X_w, Y_w, 1]^T$ is modeled by a $3 \times 3$ planar homography matrix $\mathbf{H}$:
 \begin{equation}
     s \begin{bmatrix} X_w \\ Y_w \\ 1 \end{bmatrix} = \mathbf{H} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \begin{bmatrix} h_{11} & h_{12} & h_{13} \\ h_{21} & h_{22} & h_{23} \\ h_{31} & h_{32} & h_{33} \end{bmatrix} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix}
@@ -151,7 +138,7 @@ Each detected marker correspondence forms two independent linear equations compi
     \mathbf{A}_i = \begin{bmatrix} -u_i & -v_i & -1 & 0 & 0 & 0 & u_i X_{w,i} & v_i X_{w,i} & X_{w,i} \\ 0 & 0 & 0 & -u_i & -v_i & -1 & u_i Y_{w,i} & v_i Y_{w,i} & Y_{w,i} \end{bmatrix}
 \end{equation}
 
-The optimal homography matrix is estimated using Singular Value Decomposition by extracting the singular vector associated with the minimal singular value, combined with RANSAC outlier rejection to eliminate perspective distortions:
+The optimal homography matrix is estimated using Singular Value Decomposition by extracting the singular vector associated with the minimal singular value, combined with RANSAC outlier rejection:
 \begin{equation}
     \mathbf{A} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^T, \quad \min_{\mathbf{H}} \sum_{i=1}^N \left\| \mathbf{x}_{w,i} - \frac{\mathbf{H} \tilde{\mathbf{u}}_i}{(\mathbf{H} \tilde{\mathbf{u}}_i)_3} \right\|^2
 \end{equation}
@@ -167,7 +154,7 @@ Following morphological opening and closing operations, object centroids $(\bar{
 \end{equation}
 The computed centroid is mapped through the calibrated homography matrix to generate the target Cartesian pick coordinates $(X_{\text{pick}}, Y_{\text{pick}}, Z_{\text{pick}})$.
 
-\subsection{Motion Planning and Execution}
+\subsection{Trajectory Planning and Deterministic Motion Execution}
 Trajectory generation is performed within MoveIt 2 \cite{moveit2014} utilizing the Pilz Industrial Motion Planner \cite{pilz_motion2021}. Point-to-point motions are commanded for rapid transit between park configurations and approach waypoints located 120 millimeters above target coordinates ($Z_{\text{approach}} = Z_{\text{pick}} + \SI{120}{\milli\meter}$). Linear Cartesian motions are enforced during vertical descent and retraction phases to eliminate horizontal deviation and avoid collisions with adjacent objects. Tool orientation is constrained pointing downward throughout execution using a fixed quaternion representation:
 \begin{equation}
     \mathbf{q}_{\text{ori}} = \left[ q_x = 0.0, \, q_y = \frac{\sqrt{2}}{2}, \, q_z = 0.0, \, q_w = \frac{\sqrt{2}}{2} \right]^T
@@ -180,25 +167,18 @@ Trajectory generation is performed within MoveIt 2 \cite{moveit2014} utilizing t
 \label{fig:moveit_planning}
 \end{figure}
 
-% =========================================================================
-% SECTION 4: AUTOMATED BENCHMARKING WORKFLOW
-% =========================================================================
-\section{Automated Benchmarking Workflow}
-\label{sec:benchmark_workflow}
-
+\subsection{Automated Benchmarking Workflow}
 To replace manual operator benchmarking, we developed an automated test execution runner (\texttt{auto\_benchmark\_runner.py}) and a passive telemetry logger (\texttt{benchmark\_logger.py}). The automated runner manages the complete experimental loop without human intervention. At the beginning of each run, the runner queries the vision service to obtain live object coordinates and checks workspace boundaries between $X$ from 100 to 650 mm and $Y$ from -450 to 450 mm to prevent trajectory singularity or table edge collision. Upon boundary verification, the runner publishes benchmark start metadata, triggers voice command execution, monitors pneumatic state transitions, and detects potential vacuum seal loss during transit. Upon task completion, the runner records positioning error at contact, logs tracking deviation, and publishes benchmark end metadata, appending all experimental parameters to the results CSV file.
 
 \FloatBarrier
 % =========================================================================
-% SECTION 5: RESULTS AND DISCUSSION
+% SECTION 3: RESULTS
 % =========================================================================
-\section{Results and In-Depth Discussion}
+\section{Results}
 \label{sec:results}
 
-\subsection{Latency Breakdown and Cycle Time Profile}
+\subsection{Subsystem Latency Breakdown and Cycle Time Profile}
 The end-to-end latency profile measured across the physical hardware subsystems is presented in Table~\ref{tab:latency_breakdown} and visually illustrated in Fig.~\ref{fig:latency_chart}. The total decision latency, defined as the duration from voice command completion to the onset of physical arm motion, averaged \SI{1262}{\milli\second} (\SI{1.26}{\second}). This response speed complies with standard human-robot collaboration benchmarks requiring decision latencies under 1.5 seconds for fluent interaction.
-
-The total physical cycle time averaged \SI{76.52}{\second} across trials. This duration represents the complete operational sequence executed at conservative laboratory velocity scales (50 percent for transit and 20 percent for contact) to ensure testbed safety. The cycle comprises five consecutive phases: initial decision and planning (1.26 seconds), transit from park pose to pick approach waypoint (approx. 12.5 seconds), linear descent and 500-millisecond vacuum buildup dwell (approx. 7.3 seconds), vertical retraction and transit to place waypoint (approx. 20.7 seconds), linear placement descent and 400-millisecond venting release dwell (approx. 6.2 seconds), and vertical retraction with return to park pose (approx. 28.5 seconds). In industrial production settings, executing at full rated manipulator velocity (\SI{2.0}{\meter\per\second}) reduces the complete cycle time to under 8.5 seconds.
 
 \begin{table}[htbp]
 \caption{Measured End-to-End Latency Breakdown Across Hardware and Software Subsystems.}
@@ -231,7 +211,9 @@ Physical Trajectory Execution & KUKA KRC4 Motion & $76526 \pm 3150$ \\
 \label{fig:latency_chart}
 \end{figure}
 
-\subsection{Physical Baseline Benchmark Results}
+The total physical cycle time averaged \SI{76.52}{\second} across trials. This duration represents the complete operational sequence executed at conservative laboratory velocity scales (50 percent for transit and 20 percent for contact) to ensure testbed safety. The cycle comprises five consecutive phases: initial decision and planning (1.26 seconds), transit from park pose to pick approach waypoint (approx. 12.5 seconds), linear descent and 500-millisecond vacuum buildup dwell (approx. 7.3 seconds), vertical retraction and transit to place waypoint (approx. 20.7 seconds), linear placement descent and 400-millisecond venting release dwell (approx. 6.2 seconds), and vertical retraction with return to park pose (approx. 28.5 seconds). In industrial production settings, executing at full rated manipulator velocity (\SI{2.0}{\meter\per\second}) reduces the complete cycle time to under 8.5 seconds.
+
+\subsection{Physical Baseline Benchmark Performance}
 Table~\ref{tab:benchmark_summary} and Fig.~\ref{fig:pos_error_chart} summarize the empirical baseline validation results recorded on the physical KUKA KR6 R900-2 hardware testbed across the first five consecutive trials.
 
 \begin{table}[htbp]
@@ -262,9 +244,17 @@ Run 5 (Yellow Cube) & SUCCESS (Retry) & 3.60 & $1.68^\circ$ (max $3.10^\circ$) &
 \label{fig:pos_error_chart}
 \end{figure}
 
+The physical experiments demonstrated a \SI{100.0}{\percent} pick-and-place success rate with a mean Cartesian positioning error of \SI{3.18}{\milli\meter} and a mean joint tracking error of $1.55^\circ$. All trials operated well within the \SI{8.0}{\milli\meter} airtight sealing envelope of the vacuum suction cup.
+
 \FloatBarrier
-\subsection{Literature-Grounded Comparison with Vision-Language-Action Models}
-To establish a rigorous paradigm contrast, Table~\ref{tab:vla_comparison} and the benchmark dashboard in Fig.~\ref{fig:vla_benchmark_dashboard} evaluate our proposed deterministic modular ROS 2 framework against published empirical metrics of leading Vision-Language-Action models including OpenVLA \cite{openvla2024}, Octo \cite{octo2024}, and RT-2 \cite{rt2_2023}.
+% =========================================================================
+% SECTION 4: DISCUSSION
+% =========================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Comparative Analysis against Vision-Language-Action Models}
+To evaluate our modular ROS 2 framework in the broader context of modern robotic intelligence, Table~\ref{tab:vla_comparison} and Fig.~\ref{fig:vla_benchmark_dashboard} contrast our empirical results against published performance benchmarks of state-of-the-art Vision-Language-Action models including OpenVLA \cite{openvla2024}, Octo \cite{octo2024}, and RT-2 \cite{rt2_2023}.
 
 \begin{table}[htbp]
 \caption{Architectural and Performance Comparison: Proposed Modular ROS 2 Framework vs. End-to-End Vision-Language-Action Models.}
@@ -286,8 +276,6 @@ To establish a rigorous paradigm contrast, Table~\ref{tab:vla_comparison} and th
 }
 \end{table}
 
-Figure~\ref{fig:vla_benchmark_dashboard} provides a quantitative multi-dimensional benchmark dashboard evaluating our modular ROS 2 pipeline against published empirical data from leading Vision-Language-Action models. As illustrated in Fig.~\ref{fig:vla_benchmark_dashboard}(a), our system achieves an average Cartesian positioning error of \SI{3.18}{\milli\meter}, comfortably below the \SI{8.0}{\milli\meter} physical seal limit of the vacuum suction cup. In contrast, reported tabletop manipulation errors for Octo \cite{octo2024}, OpenVLA \cite{openvla2024}, and RT-2 \cite{rt2_2023} average \SI{14.20}{\milli\meter}, \SI{16.50}{\milli\meter}, and \SI{18.00}{\milli\meter} respectively, which frequently cause vacuum seal failures on rigid components. Figure~\ref{fig:vla_benchmark_dashboard}(b) highlights the memory footprint, where our pipeline runs entirely on host CPU memory ($<$\SI{500}{\mega\byte} RAM, 0 MB GPU VRAM), whereas OpenVLA requires at least \SI{16}{\giga\byte} and RT-2 requires up to \SI{48}{\giga\byte} of GPU memory. Figure~\ref{fig:vla_benchmark_dashboard}(c) demonstrates the decision latency advantage, where our complete trajectory synthesis completes in \SI{1.26}{\second} compared to \SI{18.5}{\second} to \SI{32.0}{\second} required for multi-step closed-loop policy rollouts in VLA models. Finally, Fig.~\ref{fig:vla_benchmark_dashboard}(d) depicts computational power consumption, where our lightweight architecture consumes only \SI{15}{\watt} on a standard industrial IPC compared to \SI{220}{\watt} to \SI{500}{\watt} required by GPU workstations and server clusters.
-
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.90\textwidth]{images/figure6_vla_benchmark_comparison.png}
@@ -295,16 +283,24 @@ Figure~\ref{fig:vla_benchmark_dashboard} provides a quantitative multi-dimension
 \label{fig:vla_benchmark_dashboard}
 \end{figure}
 
+As shown in Fig.~\ref{fig:vla_benchmark_dashboard}(a), our framework achieves a mean Cartesian error of \SI{3.18}{\milli\meter}, substantially outperforming Octo (\SI{14.20}{\milli\meter}), OpenVLA (\SI{16.50}{\milli\meter}), and RT-2 (\SI{18.00}{\milli\meter}). In manufacturing processes using vacuum suction cups, errors exceeding \SI{8.0}{\milli\meter} prevent airtight seal formation, causing immediate pick failures. Furthermore, Fig.~\ref{fig:vla_benchmark_dashboard}(b) highlights the memory footprint disparity: our pipeline executes entirely on host CPU memory ($<$\SI{500}{\mega\byte} RAM, 0 MB GPU VRAM), whereas OpenVLA and RT-2 demand \SI{16}{\giga\byte} to \SI{48}{\giga\byte} of dedicated GPU memory.
+
+\subsection{Engineering Trade-offs: Determinism versus Semantic Generalization}
+The primary trade-off between modular architectures and end-to-end VLA models lies in semantic generalization versus deterministic execution. While VLA models excel at interpreting unstructured natural language prompts and novel domestic object geometries, their stochastic token outputs cannot guarantee collision-free trajectories or enforce strict Cartesian paths. In contrast, our modular ROS 2 architecture utilizes MoveIt 2 Pilz planners to mathematically guarantee linear vertical descents and deterministic collision avoidance. Furthermore, as illustrated in Fig.~\ref{fig:vla_benchmark_dashboard}(c) and Fig.~\ref{fig:vla_benchmark_dashboard}(d), our system achieves a 1.26-second decision latency and operates at \SI{15}{\watt} on a standard industrial IPC, compared to 18.5--32.0 second decision cycles and 220--500 Watt power demands in VLA computing clusters.
+
+\subsection{Practical Factory Deployment Considerations}
+Connecting external intelligence to proprietary industrial controllers like the KUKA KRC4 without altering certified safety firmware is a critical industrial requirement. By leveraging standard Ethernet KRL on port 54600, our system maintains complete compatibility with existing industrial automation lines. Coupled with the automated benchmarking pipeline, the framework enables continuous quality auditing, automated error logging, and rapid parameter optimization on live factory floors.
+
 \FloatBarrier
 % =========================================================================
-% SECTION 6: CONCLUSION AND FUTURE WORK
+% SECTION 5: CONCLUSION
 % =========================================================================
-\section{Conclusion and Future Directions}
+\section{Conclusion}
 \label{sec:conclusion}
 
 This paper presented a deterministic multimodal manipulation framework and an automated benchmarking pipeline for an industrial KUKA KR6 R900-2 manipulator using ROS 2 \cite{ros2_2022} and Ethernet KRL \cite{kuka_eki2019}. By integrating offline Vosk speech recognition \cite{vosk2020}, twelve-marker ArUco homography \cite{aruco2014}, and MoveIt 2 \cite{moveit2014} Pilz motion planning \cite{pilz_motion2021}, the system achieves responsive contactless manipulation with an average decision latency of \SI{1.26}{\second}, an average Cartesian positioning error of \SI{3.18}{\milli\meter}, and a one hundred percent pick-and-place success rate on physical hardware. The automated benchmarking suite eliminates manual operator overhead by autonomously validating workspace boundaries, executing test runs, and logging joint telemetry to structured records.
 
-Our comparative analysis against modern Vision-Language-Action models \cite{rt2_2023,openvla2024,octo2024} highlights the ongoing trade-off between open-world semantic flexibility and industrial determinism. Future research will explore hybrid hierarchical architectures where compact Vision-Language-Action models provide high-level task decomposition while low-level trajectory generation and boundary enforcement are strictly managed by deterministic planners such as MoveIt 2.
+Our comparative analysis against modern Vision-Language-Action models \cite{rt2_2023,openvla2024,octo2024} highlights that for structured manufacturing workflows, modular deterministic architectures provide superior spatial precision, lower computational overhead, guaranteed collision safety, and direct industrial controller compatibility. Future work will explore hybrid hierarchical frameworks where compact foundation models perform high-level task decomposition while deterministic ROS 2 planners enforce low-level industrial safety and trajectory constraints.
 
 % =========================================================================
 % REFERENCES
