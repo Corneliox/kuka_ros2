@@ -2,7 +2,7 @@
 %
 % Complete submission-ready paper using the official Springer svproc class
 % Structure: Introduction - Research Method - Results - Discussion - Conclusion
-% Features: Full 8 Mathematical Formulations Restored, All-Paragraph Introduction
+% Features: Figure 6 located in Section 3 (Results), 8 Core Equations, Clean Layout
 %
 %%%%%%%%%%%%%%%% Springer %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -252,6 +252,16 @@ Run 5 (Yellow Cube) & SUCCESS (Retry) & 3.60 & $1.68^\circ$ (max $3.10^\circ$) &
 
 The experiments achieved a 100\% pick-and-place success rate with an average Cartesian positioning error of \SI{3.18}{\milli\meter} and a joint tracking error of $1.55^\circ$. All trials operated well inside the \SI{8.0}{\milli\meter} vacuum sealing tolerance limit.
 
+\subsection{Multi-Dimensional Benchmark Dashboard}
+Figure~\ref{fig:vla_benchmark_dashboard} provides a multi-dimensional quantitative benchmark dashboard comparing our proposed modular ROS 2 framework against published metrics from leading Vision-Language-Action models including Octo \cite{octo2024}, OpenVLA \cite{openvla2024}, and RT-2 \cite{rt2_2023}. Across all four SI-unit metrics—Cartesian precision (Fig.~\ref{fig:vla_benchmark_dashboard}a), GPU memory footprint (Fig.~\ref{fig:vla_benchmark_dashboard}b), decision latency (Fig.~\ref{fig:vla_benchmark_dashboard}c), and computational power draw (Fig.~\ref{fig:vla_benchmark_dashboard}d)—our deterministic pipeline exhibits substantial advantages for precision manufacturing.
+
+\begin{figure}[t!]
+\centering
+\includegraphics[width=0.88\textwidth]{images/figure6_vla_benchmark_comparison.png}
+\caption{Quantitative Multi-Dimensional Benchmark Dashboard: Comparing Proposed Modular ROS 2 Stack against Leading Vision-Language-Action Models (Octo, OpenVLA, RT-2) across (a) Cartesian Positioning Precision, (b) GPU Memory Footprint, (c) Decision \& Planning Latency, and (d) Host Computational Power Draw.}
+\label{fig:vla_benchmark_dashboard}
+\end{figure}
+
 % =========================================================================
 % SECTION 4: DISCUSSION
 % =========================================================================
@@ -259,7 +269,7 @@ The experiments achieved a 100\% pick-and-place success rate with an average Car
 \label{sec:discussion}
 
 \subsection{Comparative Analysis against Vision-Language-Action Models}
-To evaluate our modular framework against state-of-the-art robotic learning methods, Table~\ref{tab:vla_comparison} and Fig.~\ref{fig:vla_benchmark_dashboard} compare our results with published metrics from leading Vision-Language-Action models including OpenVLA \cite{openvla2024}, Octo \cite{octo2024}, and RT-2 \cite{rt2_2023}.
+To evaluate our modular framework against state-of-the-art robotic learning methods, Table~\ref{tab:vla_comparison} synthesizes the architectural trade-offs between our deterministic stack and end-to-end foundation models.
 
 \begin{table}[t!]
 \caption{Concise Comparison: Proposed Modular ROS 2 Stack vs. End-to-End VLA Models.}
@@ -280,20 +290,7 @@ To evaluate our modular framework against state-of-the-art robotic learning meth
 }
 \end{table}
 
-\begin{figure}[t!]
-\centering
-\includegraphics[width=0.88\textwidth]{images/figure6_vla_benchmark_comparison.png}
-\caption{Quantitative Multi-Dimensional Benchmark Dashboard: Comparing Proposed Modular ROS 2 Stack against Leading Vision-Language-Action Models (Octo, OpenVLA, RT-2) across (a) Cartesian Positioning Precision, (b) GPU Memory Footprint, (c) Decision \& Planning Latency, and (d) Host Computational Power Draw.}
-\label{fig:vla_benchmark_dashboard}
-\end{figure}
-
-The comparison highlights four critical advantages of our engineering approach:
-\begin{enumerate}
-    \item \textbf{Positioning Accuracy}: Our system achieves an average error of \SI{3.18}{\milli\meter}, well below the \SI{8.0}{\milli\meter} suction cup limit (Fig.~\ref{fig:vla_benchmark_dashboard}a). In contrast, Octo (\SI{14.20}{\milli\meter}), OpenVLA (\SI{16.50}{\milli\meter}), and RT-2 (\SI{18.00}{\milli\meter}) exceed this threshold and frequently fail to establish an airtight vacuum seal.
-    \item \textbf{Computational Footprint}: Our pipeline runs entirely on host CPU memory ($<$\SI{500}{\mega\byte} RAM, 0 MB GPU), whereas OpenVLA and RT-2 require 16 GB to 48 GB of GPU VRAM (Fig.~\ref{fig:vla_benchmark_dashboard}b).
-    \item \textbf{Decision Latency}: Our system plans the complete trajectory in \SI{1.26}{\second}, compared to 18.5--32.0 seconds required by VLA models for step-by-step neural rollouts (Fig.~\ref{fig:vla_benchmark_dashboard}c).
-    \item \textbf{Energy Efficiency}: Our framework uses only \SI{15}{\watt} on a standard industrial computer, whereas GPU workstations consume 220 to 500 Watts (Fig.~\ref{fig:vla_benchmark_dashboard}d).
-\end{enumerate}
+As demonstrated in Fig.~\ref{fig:vla_benchmark_dashboard}(a), our system achieves an average positioning error of \SI{3.18}{\milli\meter}, well below the \SI{8.0}{\milli\meter} suction cup seal threshold. In contrast, Octo (\SI{14.20}{\milli\meter}), OpenVLA (\SI{16.50}{\milli\meter}), and RT-2 (\SI{18.00}{\milli\meter}) exceed this threshold and frequently fail to establish an airtight vacuum seal. Furthermore, our pipeline executes entirely on host CPU memory ($<$\SI{500}{\mega\byte} RAM, 0 MB GPU VRAM), whereas OpenVLA and RT-2 require 16 GB to 48 GB of GPU memory (Fig.~\ref{fig:vla_benchmark_dashboard}b). Our system also plans the full trajectory in \SI{1.26}{\second} and consumes only \SI{15}{\watt} on a standard industrial IPC, compared to 18.5--32.0 second decision latencies and 220--500 Watt power demands in VLA computing clusters (Fig.~\ref{fig:vla_benchmark_dashboard}c,d).
 
 \subsection{Engineering Trade-offs: Determinism versus Open-Vocabulary Reasoning}
 VLA models offer strong advantages when identifying novel objects in unstructured household environments. However, in factory manufacturing, the parts, locations, and vocabulary are well-defined. In this setting, deterministic motion planning provides guaranteed safety, predictable cycle times, and exact repeatability that neural policies cannot match.
