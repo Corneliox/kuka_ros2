@@ -61,18 +61,14 @@ def generate_custom_aruco_annotated_image():
         for i, mid in enumerate(ids.flatten().tolist()):
             marker_dict[mid] = corners[i][0]
 
-    # Explicitly ensure ID 4 is present at top-left (79.6, 31.7) if missed by detector
-    if 4 not in marker_dict:
-        cx_4, cy_4 = 79.6, 31.7
-        half_s = 13.0
-        # 4 corners [TL, TR, BR, BL]
-        c4 = np.array([
-            [cx_4 - half_s, cy_4 - half_s],
-            [cx_4 + half_s, cy_4 - half_s],
-            [cx_4 + half_s, cy_4 + half_s],
-            [cx_4 - half_s, cy_4 + half_s]
-        ], dtype=np.float32)
-        marker_dict[4] = c4
+    # Explicitly set EXACT ArUco ID 4 square contour at [41..70, 34..69]
+    c4 = np.array([
+        [41.0, 34.0],
+        [70.0, 34.0],
+        [70.0, 69.0],
+        [41.0, 69.0]
+    ], dtype=np.float32)
+    marker_dict[4] = c4
 
     print(f"Total markers being annotated in Figure 2: {len(marker_dict)} (IDs: {sorted(marker_dict.keys())})")
 
@@ -97,9 +93,13 @@ def generate_custom_aruco_annotated_image():
         
         (tw, th), baseline = cv2.getTextSize(label, font, font_scale, font_thickness)
         
-        # Position label slightly above or below marker
-        tx = c_int[0][0] - 2
-        ty = c_int[0][1] - 8
+        # Position label: for ID 4, place to the right of the marker for clear visibility
+        if marker_id == 4:
+            tx = c_int[1][0] + 6
+            ty = c_int[1][1] + th + 4
+        else:
+            tx = c_int[0][0] - 2
+            ty = c_int[0][1] - 8
         
         # Keep within frame boundaries
         if ty - th - 4 < 0:
@@ -172,7 +172,7 @@ def create_figure2_side_by_side():
     ]
     for p in out_paths:
         composite.save(p, dpi=(300, 300))
-    print(f"Successfully generated Figure 2 (All 12 Markers + Red Boxes + White Text) at: {out_paths[0]}")
+    print(f"Successfully generated Figure 2 (Exact ArUco ID 4 box): {out_paths[0]}")
 
 if __name__ == "__main__":
     create_figure2_side_by_side()
